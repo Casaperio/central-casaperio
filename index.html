@@ -1,0 +1,137 @@
+<!DOCTYPE html> 
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Casapē Rio</title>
+    <meta name="theme-color" content="#ffffff">
+    <link rel="shortcut icon" type="image/x-icon" href="https://www.casaperio.com.br/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Bacasime+Antique&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],       // Body text (default)
+              heading: ['Bacasime Antique', 'Georgia', 'serif'], // Headings
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.3s ease-out',
+              'marquee': 'marquee 8s linear infinite',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0', transform: 'translateY(5px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              marquee: {
+                '0%, 20%': { transform: 'translateX(0)' },
+                '80%, 100%': { transform: 'translateX(calc(-100% + 80px))' },
+              }
+            },
+            colors: {
+              primary: {
+                50: '#e6f3f7',   // Very light teal
+                100: '#b3dbe8',  // Light teal
+                200: '#80c3d9',  // Soft teal
+                300: '#4dabca',  // Medium-light teal
+                400: '#2690b3',  // Medium teal
+                500: '#024F6C',  // BASE TEAL (primary color)
+                600: '#02475f',  // Dark teal (hover states)
+                700: '#023f52',  // Darker teal
+                800: '#013745',  // Very dark teal
+                900: '#012f38',  // Darkest teal
+              },
+              secondary: {
+                50: '#fdf8f6',   // Preserved brown palette
+                100: '#f2e8e5',
+                200: '#eaddd7',
+                300: '#e0cec7',
+                400: '#d2bab0',
+                500: '#a18072',  // Brown accent
+                600: '#8a6a5c',
+                700: '#725548',
+                800: '#5d453b',
+                900: '#4a362f',
+              },
+              brand: {  // Deprecated alias pointing to primary for backward compatibility
+                50: '#e6f3f7',
+                100: '#b3dbe8',
+                200: '#80c3d9',
+                300: '#4dabca',
+                400: '#2690b3',
+                500: '#024F6C',
+                600: '#02475f',
+                700: '#023f52',
+                800: '#013745',
+                900: '#012f38',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #ffffff;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* Hide Scrollbar but allow scrolling */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      
+      /* Safe Area Utilities for Mobile */
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      .pt-safe {
+        padding-top: env(safe-area-inset-top);
+      }
+      
+      /* Prevent elastic scrolling on body to feel more native */
+      html, body {
+        overscroll-behavior-y: none;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.0",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
+    "@tanstack/react-query": "https://aistudiocdn.com/@tanstack/react-query@^5.90.12"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+    <script>
+      window.onerror = function(message, source, lineno, colno, error) {
+        console.error("Global Error:", message, error);
+        // Fallback visual para erros críticos se a app não montar
+        const root = document.getElementById('root');
+        if (root && (!root.innerHTML || root.innerHTML === '')) {
+           root.innerHTML = '<div style="padding: 20px; color: #b91c1c; font-family: sans-serif; text-align: center; margin-top: 50px;">' +
+            '<h2 style="font-size: 24px; margin-bottom: 10px;">Erro ao carregar aplicação</h2>' +
+            '<p>Ocorreu um erro crítico durante a inicialização.</p>' +
+            '<pre style="background: #fee2e2; padding: 15px; border-radius: 8px; overflow: auto; text-align: left; margin-top: 20px; font-size: 12px;">' + message + '</pre>' +
+            '</div>';
+        }
+      };
+    </script>
+  </body>
+</html>

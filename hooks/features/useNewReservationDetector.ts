@@ -1,0 +1,131 @@
+import { useEffect, useRef } from 'react';
+import { Reservation } from '../../types';
+import { playSuccessSound } from '../../utils/soundUtils';
+
+const STORAGE_KEY = 'casape_seen_reservation_ids';
+
+interface UseNewReservationDetectorProps {
+  staysReservations: Reservation[];
+  onNewReservation: (reservations: Reservation[]) => void;
+  addLog: (action: string, details: string) => void;
+  addNotification: (title: string, message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
+}
+
+/**
+ * Hook que detecta novas reservas comparando com estado anterior
+ * Extraído do App.tsx (linhas 322-455) - 133 linhas
+ */
+export function useNewReservationDetector({
+  staysReservations,
+  onNewReservation,
+  addLog,
+  addNotification
+}: UseNewReservationDetectorProps) {
+  const previousReservationsRef = useRef<Reservation[]>([]);
+
+  useEffect(() => {
+    console.log('🔍 [NEW RESERVATION DETECTOR] useEffect executou');
+    console.log('  📊 Total atual:', staysReservations.length, 'reservas');
+    console.log('  📚 Total anterior:', previousReservationsRef.current.length, 'reservas');
+
+    // Se não há reservas atuais, skip comparação
+    if (staysReservations.length === 0) {
+      console.log('  ⏭️ Sem reservas atuais - skipping');
+      return;
+    }
+
+    // Primeira inicialização - carregar IDs vistos do localStorage
+    if (previousReservationsRef.current.length === 0) {
+      console.log('  🔄 Primeira inicialização - carregando IDs do localStorage');
+
+      try {
+        const storedIds = localStorage.getItem(STORAGE_KEY);
+        if (storedIds) {
+          const seenIds = new Set(JSON.parse(storedIds));
+          console.log('  📦 IDs carregados do localStorage:', seenIds.size, 'reservas');
+
+          // Comparar com IDs vistos anteriormente
+          const newOnes = staysReservations.filter(r => !seenIds.has(r.id));
+
+          if (newOnes.length > 0) {
+            console.log('🎉 ========================================');
+            console.log('🎉 NOVAS RESERVAS DETECTADAS (após reload)!');
+            console.log('🎉 ========================================');
+            console.log('  Quantidade:', newOnes.length);
+            console.log('  Detalhes:', newOnes.map(r => ({
+              nome: r.guestName,
+              propriedade: r.propertyCode,
+              checkIn: r.checkInDate
+            })));
+
+            // Trigger callback
+            onNewReservation(newOnes);
+            playSuccessSound();
+            addLog('Nova Reserva', `Detectadas ${newOnes.length} nova(s) reserva(s)`);
+
+            // Notificação
+            const firstName = newOnes[0].guestName;
+            const msg = newOnes.length === 1
+              ? `${firstName} - ${newOnes[0].propertyCode}`
+              : `${firstName} e mais ${newOnes.length - 1}`;
+            addNotification('Nova Reserva!', msg, 'success');
+
+            console.log('  ✅ Callbacks executados, som tocado');
+          }
+        } else {
+          console.log('  📝 Nenhum histórico encontrado - primeira execução do app');
+        }
+      } catch (error) {
+        console.error('  ❌ Erro ao carregar IDs do localStorage:', error);
+      }
+
+      // Salvar estado atual
+      previousReservationsRef.current = staysReservations;
+      const currentIds = staysReservations.map(r => r.id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentIds));
+      console.log('  💾 IDs salvos no localStorage:', currentIds.length, 'reservas');
+      return;
+    }
+
+    // Comparar IDs - encontrar novas reservas (durante a sessão)
+    const previousIds = new Set(previousReservationsRef.current.map(r => r.id));
+    const newOnes = staysReservations.filter(r => !previousIds.has(r.id));
+
+    console.log('  🔎 Comparação:', newOnes.length, 'nova(s) reserva(s) detectada(s)');
+
+    // Se encontrou novas reservas
+    if (newOnes.length > 0) {
+      console.log('🎉 ========================================');
+      console.log('🎉 NOVAS RESERVAS DETECTADAS!');
+      console.log('🎉 ========================================');
+      console.log('  Quantidade:', newOnes.length);
+      console.log('  Detalhes:', newOnes.map(r => ({
+        nome: r.guestName,
+        propriedade: r.propertyCode,
+        checkIn: r.checkInDate
+      })));
+
+      // Trigger callback
+      onNewReservation(newOnes);
+      playSuccessSound();
+      addLog('Nova Reserva', `Detectadas ${newOnes.length} nova(s) reserva(s)`);
+
+      // Notificação
+      const firstName = newOnes[0].guestName;
+      const msg = newOnes.length === 1
+        ? `${firstName} - ${newOnes[0].propertyCode}`
+        : `${firstName} e mais ${newOnes.length - 1}`;
+      addNotification('Nova Reserva!', msg, 'success');
+
+      console.log('  ✅ Callbacks executados, som tocado');
+    } else {
+      console.log('  ℹ️ Nenhuma reserva nova - estado inalterado');
+    }
+
+    // Atualizar referência e localStorage
+    previousReservationsRef.current = staysReservations;
+    const currentIds = staysReservations.map(r => r.id);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentIds));
+    console.log('  💾 Referência atualizada + localStorage sincronizado');
+  }, [staysReservations, onNewReservation, addLog, addNotification]);
+}

@@ -1,0 +1,7 @@
+{
+  "name": "Casapē Rio Chamados",
+  "description": "A comprehensive ticket management system for Casapē Boutique Real Estate, bridging Guest Relations and Maintenance teams with AI-powered insights.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
