@@ -16,6 +16,7 @@ interface TicketDetailModalProps {
 
 const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateStatus, onAssign, onAddExpense, onDeleteExpense, onDeleteTicket, onDismissCheckoutTicket, allUsers }) => {
  const isUrgent = ticket.priority.toLowerCase().includes('urgente');
+ const isVirtualTicket = (ticket as any)._isVirtual === true;
  const [showCompletionDate, setShowCompletionDate] = useState(false);
  const [completionDate, setCompletionDate] = useState(() => {
   const now = new Date();
@@ -220,7 +221,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
         <div className="w-full">
          <div className="flex justify-between items-center mb-1">
           <p className="text-sm font-medium text-gray-900">Responsável Técnico</p>
-          {!assignMode && (
+          {!assignMode && !isVirtualTicket && (
            <button onClick={() => setAssignMode(true)} className="text-xs text-brand-600 hover:underline p-1">
             {ticket.assignee ? 'Alterar' : 'Atribuir'}
            </button>
@@ -266,8 +267,8 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
         <DollarSign size={16} /> Custos e Despesas
        </h3>
-       {!showExpenseForm && (
-        <button 
+       {!showExpenseForm && !isVirtualTicket && (
+        <button
          onClick={() => setShowExpenseForm(true)}
          className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1 hover:bg-brand-50 px-2 py-1 rounded transition-colors"
         >
@@ -386,8 +387,8 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
         </button>
 
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto justify-end">
-         {ticket.status !== TicketStatus.DONE && (
-          <button 
+         {ticket.status !== TicketStatus.DONE && !isVirtualTicket && (
+          <button
            onClick={() => {
             if (ticket.status === TicketStatus.OPEN) {
              handleStartTicket();
@@ -405,8 +406,8 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
            )}
           </button>
          )}
-         {ticket.status === TicketStatus.DONE && (
-          <button 
+         {ticket.status === TicketStatus.DONE && !isVirtualTicket && (
+          <button
            onClick={() => onUpdateStatus(ticket.id, TicketStatus.IN_PROGRESS)}
            className="px-6 py-3 md:py-2.5 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 w-full md:w-auto"
           >

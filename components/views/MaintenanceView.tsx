@@ -6,6 +6,7 @@ import { SkeletonCard, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import { TypeFilter } from './TypeFilter';
 import PeriodFilter from './PeriodFilter';
+import { resolveReservationForCheckoutTicket } from '../../utils';
 
 interface MaintenanceViewProps {
   tickets: Ticket[];
@@ -22,6 +23,7 @@ interface MaintenanceViewProps {
   filterMaintenanceType: string;
   setFilterMaintenanceType: (type: string) => void;
   setSelectedReservation: (reservation: Reservation) => void;
+  staysReservations: Reservation[];
   activeModule: AppModule;
   gridColumns: number;
   periodPreset: PeriodPreset;
@@ -33,6 +35,7 @@ interface MaintenanceViewProps {
   onLoadMore: () => void;
   totalItems: number;
   displayCount: number;
+  addNotification?: (title: string, message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
 export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
@@ -50,6 +53,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   filterMaintenanceType,
   setFilterMaintenanceType,
   setSelectedReservation,
+  staysReservations,
   activeModule,
   gridColumns,
   periodPreset,
@@ -60,12 +64,40 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   hasMoreItems,
   onLoadMore,
   totalItems,
-  displayCount
+  displayCount,
+  addNotification
 }) => {
   const getGridClass = () => {
     if (gridColumns === 2) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2';
     if (gridColumns === 4) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4';
     return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+  };
+
+  const handleTicketClick = (ticket: Ticket) => {
+    // Se for ticket automático de checkout, tentar resolver a reserva
+    if (ticket.isCheckoutTicket) {
+      const { reservation, logs } = resolveReservationForCheckoutTicket(ticket, staysReservations);
+
+      console.log('[handleTicketClick] Resolução de checkout:', logs);
+
+      if (reservation) {
+        // Encontrou a reserva -> abrir ReservationDetailModal
+        setSelectedReservation(reservation);
+        return;
+      } else {
+        // Não encontrou a reserva -> mostrar toast e abrir TicketDetailModal como fallback
+        if (addNotification) {
+          addNotification(
+            'Reserva não encontrada',
+            'Não foi possível localizar a reserva correspondente. Exibindo ticket.',
+            'warning'
+          );
+        }
+      }
+    }
+
+    // Fallback: abrir modal de ticket normal
+    setSelectedTicket(ticket);
   };
 
   if (viewMode === 'calendar') {
@@ -75,7 +107,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
         tickets={filteredTickets}
         currentDate={currentMonth}
         onDateChange={setCurrentMonth}
-        onItemClick={setSelectedTicket}
+        onItemClick={handleTicketClick}
       />
     );
   }
@@ -171,7 +203,10 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                     return (
                       <div
                         key={ticket.id}
-                        onClick={() => setSelectedTicket(ticket)}
+                        onClick={() => {
+                          console.log('[CLICK-AGUARDANDO]', ticket.id, ticket.propertyCode, ticket.isCheckoutTicket);
+                          handleTicketClick(ticket);
+                        }}
                         className={`bg-white p-4 rounded-lg border shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden flex flex-col min-w-0 ${
                           isExpired ? 'ring-2 ring-red-500 bg-red-50/20' :
                           ticket.isCheckoutTicket ? 'ring-2 ring-violet-400 bg-violet-50/30' :
@@ -227,7 +262,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
         filteredTickets.map(ticket => (
           <div
             key={ticket.id}
-            onClick={() => setSelectedTicket(ticket)}
+            onClick={() => handleTicketClick(ticket)}
             className={`bg-white p-3 rounded-lg border flex items-center justify-between hover:bg-gray-50 cursor-pointer transition-colors ${
               ticket.isCheckoutTicket ? 'border-violet-300 bg-violet-50/30' :
               ticket.isGuestRequest ? 'border-yellow-300 bg-yellow-50/30' :
