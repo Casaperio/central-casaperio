@@ -11,6 +11,76 @@ export interface MaintenanceGroup {
   isBacklog?: boolean;
 }
 
+export type PeriodPreset = 'all' | 'today' | '7days' | '30days' | 'thisMonth' | 'custom';
+
+/**
+ * Ordena grupos de manutenção de forma inteligente
+ * @param dateGroups - Grupos com data (sem o grupo "Aguardando")
+ * @param backlogGroup - Grupo "Aguardando Agendamento" (sempre primeiro)
+ * @param periodPreset - Preset selecionado
+ * @param shouldFilterByPeriod - Se está aplicando filtro de período
+ */
+function orderMaintenanceGroups({
+  dateGroups,
+  backlogGroup,
+  periodPreset,
+  shouldFilterByPeriod,
+}: {
+  dateGroups: MaintenanceGroup[];
+  backlogGroup: MaintenanceGroup[];
+  periodPreset: PeriodPreset;
+  shouldFilterByPeriod: boolean;
+}): MaintenanceGroup[] {
+  // Se não há grupos com data, retornar apenas backlog
+  if (dateGroups.length === 0) {
+    return backlogGroup;
+  }
+
+  // Parse de data consistente (evitar problemas de timezone)
+  const parseDate = (dateStr: string): number => {
+    return new Date(dateStr + 'T00:00:00').getTime();
+  };
+
+  // Modo A: preset "Todos" (sem filtro) - janela de relevância
+  if (periodPreset === 'all' && !shouldFilterByPeriod) {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const todayTime = now.getTime();
+
+    // Janela de relevância: (hoje - 4 dias) a (hoje + 7 dias)
+    const windowStart = todayTime - (4 * 24 * 60 * 60 * 1000);
+    const windowEnd = todayTime + (7 * 24 * 60 * 60 * 1000);
+
+    // Grupos dentro da janela de relevância
+    const windowGroups = dateGroups
+      .filter(g => {
+        const groupTime = parseDate(g.date!);
+        return groupTime >= windowStart && groupTime <= windowEnd;
+      })
+      .sort((a, b) => parseDate(a.date!) - parseDate(b.date!)); // ASC
+
+    // Grupos futuros além da janela
+    const futureBeyondWindow = dateGroups
+      .filter(g => parseDate(g.date!) > windowEnd)
+      .sort((a, b) => parseDate(a.date!) - parseDate(b.date!)); // ASC
+
+    // Grupos passados antes da janela
+    const pastBeforeWindow = dateGroups
+      .filter(g => parseDate(g.date!) < windowStart)
+      .sort((a, b) => parseDate(b.date!) - parseDate(a.date!)); // DESC
+
+    return [...backlogGroup, ...windowGroups, ...futureBeyondWindow, ...pastBeforeWindow];
+  }
+
+  // Modo B: com filtro de período (Hoje / 7 dias / 30 dias / Este mês / Personalizado)
+  // Ordenação estritamente cronológica ASC
+  const sortedDateGroups = [...dateGroups].sort((a, b) => {
+    return parseDate(a.date!) - parseDate(b.date!); // ASC
+  });
+
+  return [...backlogGroup, ...sortedDateGroups];
+}
+
 interface UseMaintenanceFiltersProps {
   tickets: Ticket[];
   staysReservations: Reservation[];
@@ -20,6 +90,9 @@ interface UseMaintenanceFiltersProps {
   filterMaintenanceProperty: string;
   filterMaintenanceType: string;
   activeModule: string | null;
+  periodPreset?: PeriodPreset;
+  customStartDate?: string;
+  customEndDate?: string;
 }
 
 export function useMaintenanceFilters({
@@ -31,7 +104,68 @@ export function useMaintenanceFilters({
   filterMaintenanceProperty,
   filterMaintenanceType,
   activeModule,
+  periodPreset = 'all',
+  customStartDate = '',
+  customEndDate = '',
 }: UseMaintenanceFiltersProps) {
+
+  // Calcular intervalo de datas baseado no preset
+  // Usa intervalo half-open: [startInclusive, endExclusive)
+  const { periodStartDate, periodEndDate, shouldFilterByPeriod } = useMemo(() => {
+    // Se for 'all', não filtrar por período
+    if (periodPreset === 'all') {
+      return {
+        periodStartDate: null,
+        periodEndDate: null,
+        shouldFilterByPeriod: false
+      };
+    }
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    let startDate = new Date(now);
+    let endExclusive = new Date(now);
+
+    switch (periodPreset) {
+      case 'today':
+        // Hoje: [início de hoje, início de amanhã)
+        endExclusive = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        break;
+      case '7days':
+        // Próximos 7 dias: [hoje, hoje+7)
+        endExclusive = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30days':
+        // Próximos 30 dias: [hoje, hoje+30)
+        endExclusive = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        break;
+      case 'thisMonth':
+        // Este mês: [início do mês, início do próximo mês)
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endExclusive = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        break;
+      case 'custom':
+        // Personalizado: incluir customEndDate inteiro
+        if (customStartDate) {
+          startDate = new Date(customStartDate + 'T00:00:00');
+        }
+        if (customEndDate) {
+          const endDate = new Date(customEndDate + 'T00:00:00');
+          endExclusive = new Date(endDate.getTime() + 24 * 60 * 60 * 1000);
+        }
+        break;
+    }
+
+    startDate.setHours(0, 0, 0, 0);
+    endExclusive.setHours(0, 0, 0, 0);
+
+    return {
+      periodStartDate: startDate,
+      periodEndDate: endExclusive,
+      shouldFilterByPeriod: true
+    };
+  }, [periodPreset, customStartDate, customEndDate]);
 
   const filteredTickets = useMemo(() => {
     if (activeModule !== 'maintenance' && activeModule !== 'concierge') return [];
@@ -75,14 +209,23 @@ export function useMaintenanceFilters({
         }
       }
 
-      // Filtrar tickets concluídos que são anteriores a hoje
-      if (t.status === TicketStatus.DONE) {
-        const dateStr = t.completedDate || t.scheduledDate || t.desiredDate;
-        const tDate = new Date(dateStr);
-        tDate.setHours(0,0,0,0);
-        if (tDate.getTime() < today.getTime()) {
-          return false;
+      // Filtrar por período de data (apenas se shouldFilterByPeriod = true)
+      if (shouldFilterByPeriod && periodStartDate && periodEndDate) {
+        // Tickets sem scheduledDate e não-concluídos vão para "Aguardando Agendamento"
+        // Esses devem SEMPRE passar (não aplicar filtro de período)
+        const hasScheduledDate = t.scheduledDate || (t.status === TicketStatus.DONE && t.completedDate);
+
+        if (hasScheduledDate) {
+          // Tem data: aplicar filtro de período
+          const ticketDate = new Date(t.completedDate || t.scheduledDate || t.desiredDate || t.createdAt);
+          ticketDate.setHours(0, 0, 0, 0);
+
+          // Intervalo half-open: [start, endExclusive)
+          if (ticketDate < periodStartDate || ticketDate >= periodEndDate) {
+            return false;
+          }
         }
+        // Sem data agendada: sempre passa (vai para "Aguardando Agendamento")
       }
 
       return matchesSearch && matchesStatus && matchesAssignee && matchesProperty && matchesType;
@@ -107,7 +250,7 @@ export function useMaintenanceFilters({
       }
       return 0;
     });
-  }, [tickets, searchTerm, filterStatus, filterMaintenanceAssignee, filterMaintenanceProperty, filterMaintenanceType, activeModule]);
+  }, [tickets, searchTerm, filterStatus, filterMaintenanceAssignee, filterMaintenanceProperty, filterMaintenanceType, activeModule, periodStartDate, periodEndDate, shouldFilterByPeriod]);
 
   const maintenanceGroups = useMemo(() => {
     if (activeModule !== 'maintenance' && activeModule !== 'concierge') return [];
@@ -134,19 +277,21 @@ export function useMaintenanceFilters({
       });
     }
 
-    // Adicionar checkouts aos grupos (próximos 15 dias)
+    // Adicionar checkouts aos grupos
     if (activeModule === 'maintenance' && shouldShowCheckouts) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const fifteenDaysLater = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000);
-
       staysReservations.forEach(r => {
         if (r.status === ReservationStatus.CANCELED) return;
         const checkoutDate = new Date(r.checkOutDate);
         checkoutDate.setHours(0, 0, 0, 0);
 
-        // Filtrar checkouts dos próximos 15 dias
-        if (checkoutDate >= today && checkoutDate <= fifteenDaysLater) {
+        // Filtrar checkouts por período (se aplicável)
+        let passesDateFilter = true;
+        if (shouldFilterByPeriod && periodStartDate && periodEndDate) {
+          // Intervalo half-open: [start, endExclusive)
+          passesDateFilter = checkoutDate >= periodStartDate && checkoutDate < periodEndDate;
+        }
+
+        if (passesDateFilter) {
           // Aplicar filtros aos checkouts
           const matchesSearch =
             searchTerm === '' ||
@@ -164,6 +309,8 @@ export function useMaintenanceFilters({
       });
     }
 
+    // Preparar grupo "Aguardando Agendamento" (se houver)
+    const backlogGroup: MaintenanceGroup[] = [];
     if (unscheduled.length > 0) {
       const sortedUnscheduled = unscheduled.sort((a, b) => {
         if ('createdAt' in a && 'createdAt' in b) {
@@ -171,42 +318,57 @@ export function useMaintenanceFilters({
         }
         return 0;
       });
-      groups.push({ id: 'backlog', label: 'Aguardando Agendamento / Em Aberto', items: sortedUnscheduled, isBacklog: true });
+      backlogGroup.push({
+        id: 'backlog',
+        label: 'Aguardando Agendamento / Em Aberto',
+        items: sortedUnscheduled,
+        isBacklog: true
+      });
     }
 
-    const sortedKeys = Object.keys(scheduledMap).sort();
-
+    // Preparar grupos por data
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
-    sortedKeys.forEach(key => {
+    const dateGroups: MaintenanceGroup[] = [];
+    Object.keys(scheduledMap).forEach(key => {
       const dateObj = new Date(key + 'T12:00:00');
       let label = dateObj.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
       if (key === today) label = `Hoje • ${label}`;
       else if (key === tomorrow) label = `Amanhã • ${label}`;
 
-      groups.push({ id: key, label: label, date: key, items: scheduledMap[key] });
+      dateGroups.push({ id: key, label: label, date: key, items: scheduledMap[key] });
     });
 
-    return groups;
-  }, [filteredTickets, staysReservations, activeModule, filterMaintenanceType, searchTerm, filterMaintenanceProperty]);
+    // Aplicar ordenação inteligente
+    return orderMaintenanceGroups({
+      dateGroups,
+      backlogGroup,
+      periodPreset,
+      shouldFilterByPeriod,
+    });
+  }, [filteredTickets, staysReservations, activeModule, filterMaintenanceType, searchTerm, filterMaintenanceProperty, periodStartDate, periodEndDate, shouldFilterByPeriod, periodPreset]);
 
   const upcomingCheckouts = useMemo(() => {
     if (activeModule !== 'maintenance') return [];
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const fifteenDaysLater = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000);
 
     return staysReservations
       .filter(r => {
         if (r.status === ReservationStatus.CANCELED) return false;
         const checkoutDate = new Date(r.checkOutDate);
         checkoutDate.setHours(0, 0, 0, 0);
-        return checkoutDate >= today && checkoutDate <= fifteenDaysLater;
+
+        // Se tiver filtro de período, aplicar
+        if (shouldFilterByPeriod && periodStartDate && periodEndDate) {
+          // Intervalo half-open: [start, endExclusive)
+          return checkoutDate >= periodStartDate && checkoutDate < periodEndDate;
+        }
+
+        // Sem filtro de período, retornar todos os checkouts futuros
+        return true;
       })
       .sort((a, b) => new Date(a.checkOutDate).getTime() - new Date(b.checkOutDate).getTime());
-  }, [staysReservations, activeModule]);
+  }, [staysReservations, activeModule, periodStartDate, periodEndDate, shouldFilterByPeriod]);
 
   return {
     filteredTickets,

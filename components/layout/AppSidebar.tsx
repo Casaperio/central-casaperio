@@ -3,7 +3,7 @@ import {
  Wrench, Shield, CalendarRange, Inbox, Smartphone, Kanban, Target,
  Building2, Map, Plane, Box, Briefcase, PieChart, FileText, BookOpen,
  Tag, MessageSquare, DollarSign, Settings, ScrollText, ChevronRight,
- RefreshCw, LogOut as LogOutIcon, Gem
+ LogOut as LogOutIcon, Gem
 } from 'lucide-react';
 import type { User, AppModule, ViewMode } from '../../types';
 
@@ -13,13 +13,10 @@ interface AppSidebarProps {
  viewMode: ViewMode;
  sidebarOpen: boolean;
  mobileMenuOpen: boolean;
- isSystemRefreshing: boolean;
- lastSystemRefresh: Date | null;
  onModuleChange: (module: AppModule, view: ViewMode) => void;
  onViewModeChange: (view: ViewMode) => void;
  onToggleSidebar: () => void;
  onCloseMobileMenu: () => void;
- onGlobalRefresh: () => void;
  onLogout: () => void;
 }
 
@@ -29,13 +26,10 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
  viewMode,
  sidebarOpen,
  mobileMenuOpen,
- isSystemRefreshing,
- lastSystemRefresh,
  onModuleChange,
  onViewModeChange,
  onToggleSidebar,
  onCloseMobileMenu,
- onGlobalRefresh,
  onLogout,
 }) => {
  const handleModuleClick = (module: AppModule, view: ViewMode) => {
@@ -185,23 +179,6 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
    </nav>
 
    <div className="p-4 bg-white border-t border-gray-200">
-    <div className={`mb-4 flex flex-col gap-1 ${(sidebarOpen || mobileMenuOpen) ? '' : 'items-center'}`}>
-     <button
-      onClick={onGlobalRefresh}
-      disabled={isSystemRefreshing}
-      className={`flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg text-sm font-medium transition-all ${(!sidebarOpen && !mobileMenuOpen) ? 'justify-center w-10 h-10 px-0' : 'w-full'}`}
-      title="Atualizar Sistema (Stays e Voos)"
-     >
-      <RefreshCw size={18} className={isSystemRefreshing ? "animate-spin" : ""} />
-      {(sidebarOpen || mobileMenuOpen) && <span>Atualizar Dados</span>}
-     </button>
-     {(sidebarOpen || mobileMenuOpen) && lastSystemRefresh && (
-      <p className="text-[10px] text-gray-400 text-center">
-       Última: {lastSystemRefresh.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-      </p>
-     )}
-    </div>
-
     <div className={`flex items-center gap-3 ${!sidebarOpen && !mobileMenuOpen && 'justify-center'}`}>
      <button onClick={() => handleViewClick('profile')} className="relative shrink-0">
       {currentUser.avatar ? (

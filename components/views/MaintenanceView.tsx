@@ -1,10 +1,11 @@
 import React from 'react';
-import { AlertCircle, CalendarClock, LogOut as LogOutIcon } from 'lucide-react';
+import { AlertCircle, CalendarClock, LogOut as LogOutIcon, ChevronDown } from 'lucide-react';
 import { Ticket, TicketStatus, Reservation, AppModule } from '../../types';
-import { MaintenanceGroup, MaintenanceItem } from '../../hooks/features/useMaintenanceFilters';
+import { MaintenanceGroup, MaintenanceItem, PeriodPreset } from '../../hooks/features/useMaintenanceFilters';
 import { SkeletonCard, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import { TypeFilter } from './TypeFilter';
+import PeriodFilter from './PeriodFilter';
 
 interface MaintenanceViewProps {
   tickets: Ticket[];
@@ -23,6 +24,15 @@ interface MaintenanceViewProps {
   setSelectedReservation: (reservation: Reservation) => void;
   activeModule: AppModule;
   gridColumns: number;
+  periodPreset: PeriodPreset;
+  customStartDate: string;
+  customEndDate: string;
+  onPeriodPresetChange: (preset: PeriodPreset) => void;
+  onCustomDateChange: (startDate: string, endDate: string) => void;
+  hasMoreItems: boolean;
+  onLoadMore: () => void;
+  totalItems: number;
+  displayCount: number;
 }
 
 export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
@@ -41,7 +51,16 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   setFilterMaintenanceType,
   setSelectedReservation,
   activeModule,
-  gridColumns
+  gridColumns,
+  periodPreset,
+  customStartDate,
+  customEndDate,
+  onPeriodPresetChange,
+  onCustomDateChange,
+  hasMoreItems,
+  onLoadMore,
+  totalItems,
+  displayCount
 }) => {
   const getGridClass = () => {
     if (gridColumns === 2) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2';
@@ -68,7 +87,14 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   return (
     <div className={viewMode === 'cards' ? "space-y-8" : "space-y-4"}>
       {activeModule === 'maintenance' && (
-        <div className="mb-4">
+        <div className="space-y-3 mb-4">
+          <PeriodFilter
+            selectedPreset={periodPreset}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+            onPresetChange={onPeriodPresetChange}
+            onCustomDateChange={onCustomDateChange}
+          />
           <TypeFilter
             filterMaintenanceType={filterMaintenanceType}
             setFilterMaintenanceType={setFilterMaintenanceType}
@@ -179,6 +205,22 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                 </div>
               </div>
             ))
+          )}
+
+          {/* Botão Ver Mais */}
+          {hasMoreItems && maintenanceGroups.length > 0 && (
+            <div className="flex justify-center pt-6">
+              <button
+                onClick={onLoadMore}
+                className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-brand-700 bg-brand-50 border border-brand-200 rounded-lg hover:bg-brand-100 transition-colors"
+              >
+                <span>Ver mais</span>
+                <ChevronDown size={18} />
+                <span className="text-xs text-gray-500">
+                  ({displayCount} de {totalItems})
+                </span>
+              </button>
+            </div>
           )}
         </>
       ) : (
