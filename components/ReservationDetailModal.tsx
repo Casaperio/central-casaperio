@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Reservation, ReservationStatus, User, FlightData, Ticket } from '../types';
-import { X, Calendar, User as UserIcon, ChevronLeft, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby, Repeat } from 'lucide-react';
+import { X, Calendar, User as UserIcon, ChevronLeft, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby, Repeat, MessageSquare } from 'lucide-react';
 import { checkFlightStatus } from '../services/geminiService';
+import { storageService } from '../services/storage';
 
 interface ReservationDetailModalProps {
  reservation: Reservation;
@@ -80,14 +81,83 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  const [expenseAmount, setExpenseAmount] = useState('');
  const [showExpenseForm, setShowExpenseForm] = useState(false);
 
+ // Guest Note State
+ const [guestNote, setGuestNote] = useState('');
+ const [loadingNote, setLoadingNote] = useState(true);
+ const [savingNote, setSavingNote] = useState(false);
+ const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
  // Linked Tickets Logic
- const linkedTickets = tickets.filter(t => 
-   t.reservationId === reservation.id || 
+ const linkedTickets = tickets.filter(t =>
+   t.reservationId === reservation.id ||
    // Fallback: Tickets created during reservation for same property
-   (t.propertyCode === reservation.propertyCode && 
-    t.createdAt >= new Date(reservation.checkInDate).getTime() && 
+   (t.propertyCode === reservation.propertyCode &&
+    t.createdAt >= new Date(reservation.checkInDate).getTime() &&
     t.createdAt <= new Date(reservation.checkOutDate).getTime())
  ).sort((a,b) => b.createdAt - a.createdAt);
+
+ // Carrega a nota do hóspede do Firestore
+ useEffect(() => {
+   const loadGuestNote = async () => {
+     const guestKey = normalizeGuestName(reservation.guestName);
+     try {
+       const note = await storageService.guestNotes.get(guestKey);
+       if (note) {
+         setGuestNote(note.note || '');
+       }
+     } catch (error) {
+       console.error('Erro ao carregar nota do hóspede:', error);
+     } finally {
+       setLoadingNote(false);
+     }
+   };
+
+   loadGuestNote();
+ }, [reservation.guestName]);
+
+ // Salva a nota no Firestore com debounce de 1 segundo
+ const saveGuestNote = useCallback(async (noteText: string) => {
+   const guestKey = normalizeGuestName(reservation.guestName);
+   setSavingNote(true);
+
+   try {
+     await storageService.guestNotes.set({
+       guestKey,
+       guestName: reservation.guestName,
+       note: noteText,
+       updatedAt: Date.now(),
+       updatedBy: currentUser.name
+     });
+   } catch (error) {
+     console.error('Erro ao salvar nota do hóspede:', error);
+   } finally {
+     setSavingNote(false);
+   }
+ }, [reservation.guestName, currentUser.name]);
+
+ // Handler com debounce para evitar spam de writes
+ const handleGuestNoteChange = useCallback((value: string) => {
+   setGuestNote(value);
+
+   // Limpa o timer anterior
+   if (debounceTimerRef.current) {
+     clearTimeout(debounceTimerRef.current);
+   }
+
+   // Agenda o salvamento após 1 segundo de inatividade
+   debounceTimerRef.current = setTimeout(() => {
+     saveGuestNote(value);
+   }, 1000);
+ }, [saveGuestNote]);
+
+ // Cleanup do debounce timer
+ useEffect(() => {
+   return () => {
+     if (debounceTimerRef.current) {
+       clearTimeout(debounceTimerRef.current);
+     }
+   };
+ }, []);
 
  useEffect(() => {
   // Check for any change
@@ -332,6 +402,30 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
               </div>
              </div>
           </div>
+        </div>
+
+        {/* Guest Notes */}
+        <div className="bg-amber-50 rounded-none p-5 border border-amber-100">
+          <div className="flex items-center gap-2 mb-3">
+            <MessageSquare size={18} className="text-amber-700" />
+            <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wide">Observações sobre o Hóspede</h3>
+            {savingNote && <span className="text-xs text-amber-600 ml-auto">Salvando...</span>}
+            {!savingNote && guestNote && <span className="text-xs text-green-600 ml-auto">✓ Salvo</span>}
+          </div>
+          {loadingNote ? (
+            <div className="animate-pulse bg-amber-100 h-24 rounded"></div>
+          ) : (
+            <textarea
+              value={guestNote}
+              onChange={(e) => handleGuestNoteChange(e.target.value)}
+              className="w-full text-sm p-3 rounded border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none bg-white"
+              placeholder="Adicione observações internas sobre este hóspede (preferências, histórico, alertas, etc.)..."
+              rows={4}
+            />
+          )}
+          <p className="text-xs text-amber-700 mt-2">
+            💡 Nota: Estas observações são compartilhadas entre todas as reservas deste hóspede e são visíveis apenas para a equipe.
+          </p>
         </div>
 
         {/* Dates & Times (Early/Late) */}

@@ -74,6 +74,15 @@ export interface GuestFeedback {
   createdAt: number;
 }
 
+export interface GuestNote {
+  id: string;
+  guestKey: string; // Nome normalizado usado como chave
+  guestName: string; // Nome original do hóspede
+  note: string; // Observações/comentários sobre o hóspede
+  updatedAt: number;
+  updatedBy: string; // Nome do usuário que atualizou
+}
+
 export interface Ticket {
   id: string;
   propertyCode: string;
