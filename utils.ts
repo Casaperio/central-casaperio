@@ -156,14 +156,33 @@ export const normalizePropertyCode = (code: string): string => {
 export const toDateOnly = (value: any): string => {
   if (!value) return '';
 
-  // Se for string com "T", usar split (já está em formato ISO)
-  if (typeof value === 'string' && value.includes('T')) {
-    return value.split('T')[0];
-  }
-
-  // Se for string sem "T", retornar como está (assumindo já é YYYY-MM-DD)
+  // Se for string exatamente no formato YYYY-MM-DD, retornar como está
   if (typeof value === 'string') {
-    return value;
+    // Regex para YYYY-MM-DD
+    const dateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (dateOnlyRegex.test(value)) {
+      return value;
+    }
+
+    // Se tiver 'T' (ISO string), converter para Date e formatar no timezone LOCAL
+    if (value.includes('T')) {
+      const date = new Date(value);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    // String em outro formato: tentar parsear
+    const parsed = new Date(value);
+    if (!isNaN(parsed.getTime())) {
+      const year = parsed.getFullYear();
+      const month = String(parsed.getMonth() + 1).padStart(2, '0');
+      const day = String(parsed.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    return '';
   }
 
   // Se for Date ou timestamp, formatar YYYY-MM-DD no timezone LOCAL
@@ -232,6 +251,28 @@ export const resolveReservationForCheckoutTicket = (
   }
 
   // Buscar reserva que tenha o mesmo propertyCode normalizado e checkoutDate
+  // Adicionar logs detalhados para debugging
+  const candidates: any[] = [];
+
+  staysReservations.forEach(r => {
+    const resPropertyCode = normalizePropertyCode(r.propertyCode || '');
+    const resCheckoutDate = toDateOnly(r.checkOutDate || '');
+
+    candidates.push({
+      id: r.id,
+      propertyCode: r.propertyCode,
+      normalizedPropertyCode: resPropertyCode,
+      checkOutDate: r.checkOutDate,
+      normalizedCheckoutDate: resCheckoutDate,
+      matchesPropertyCode: resPropertyCode === normalizedPropertyCode,
+      matchesDate: resCheckoutDate === normalizedDate,
+      isMatch: resPropertyCode === normalizedPropertyCode && resCheckoutDate === normalizedDate
+    });
+  });
+
+  logs.candidatesCount = staysReservations.length;
+  logs.matchingCandidates = candidates.filter(c => c.isMatch);
+
   const byMatch = staysReservations.find(r => {
     const resPropertyCode = normalizePropertyCode(r.propertyCode || '');
     const resCheckoutDate = toDateOnly(r.checkOutDate || '');
@@ -241,9 +282,11 @@ export const resolveReservationForCheckoutTicket = (
   if (byMatch) {
     logs.method = 'propertyCode_and_date';
     logs.foundReservationId = byMatch.id;
+    logs.foundReservationExternalId = byMatch.externalId;
     return { reservation: byMatch, logs };
   }
 
   logs.method = 'not_found';
+  logs.debugCandidates = candidates.slice(0, 5); // Primeiros 5 para debugging
   return { reservation: null, logs };
 };

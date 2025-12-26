@@ -15,14 +15,14 @@ interface MaintenanceViewProps {
   viewMode: string;
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
-  setSelectedTicket: (ticket: Ticket) => void;
+  setSelectedTicket: (ticket: Ticket | null) => void;
   searchTerm: string;
   filterStatus: string;
   filterMaintenanceAssignee: string;
   filterMaintenanceProperty: string;
   filterMaintenanceType: string;
   setFilterMaintenanceType: (type: string) => void;
-  setSelectedReservation: (reservation: Reservation) => void;
+  setSelectedReservation: (reservation: Reservation | null) => void;
   staysReservations: Reservation[];
   activeModule: AppModule;
   gridColumns: number;
@@ -81,7 +81,9 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
       console.log('[handleTicketClick] Resolução de checkout:', logs);
 
       if (reservation) {
-        // Encontrou a reserva -> abrir ReservationDetailModal
+        // Encontrou a reserva -> abrir ReservationDetailModal APENAS
+        // Limpar selectedTicket para garantir que não abre TicketDetailModal também
+        setSelectedTicket(null);
         setSelectedReservation(reservation);
         return;
       } else {
@@ -93,6 +95,8 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
             'warning'
           );
         }
+        // Fallback: limpar reserva e abrir ticket
+        setSelectedReservation(null);
       }
     }
 
