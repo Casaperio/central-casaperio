@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Ticket, TicketStatus, Reservation, ReservationStatus } from '../../types';
+import { getMaintenanceItemKey } from '../../utils';
 
 export type MaintenanceItem = Ticket | { type: 'checkout'; reservation: Reservation };
 
@@ -93,6 +94,7 @@ interface UseMaintenanceFiltersProps {
   periodPreset?: PeriodPreset;
   customStartDate?: string;
   customEndDate?: string;
+  maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>;
 }
 
 export function useMaintenanceFilters({
@@ -107,6 +109,7 @@ export function useMaintenanceFilters({
   periodPreset = 'all',
   customStartDate = '',
   customEndDate = '',
+  maintenanceOverrides = {},
 }: UseMaintenanceFiltersProps) {
 
   // Calcular intervalo de datas baseado no preset
@@ -179,6 +182,12 @@ export function useMaintenanceFilters({
       const ticketCat = t.category || 'maintenance';
       if (ticketCat !== targetCategory) return false;
 
+      // Filtrar items ocultos (dispensados pelo usuário)
+      const itemKey = getMaintenanceItemKey(t);
+      if (maintenanceOverrides[itemKey]?.hidden) {
+        return false;
+      }
+
       const matchesSearch =
         t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.propertyCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -250,7 +259,7 @@ export function useMaintenanceFilters({
       }
       return 0;
     });
-  }, [tickets, searchTerm, filterStatus, filterMaintenanceAssignee, filterMaintenanceProperty, filterMaintenanceType, activeModule, periodStartDate, periodEndDate, shouldFilterByPeriod]);
+  }, [tickets, searchTerm, filterStatus, filterMaintenanceAssignee, filterMaintenanceProperty, filterMaintenanceType, activeModule, periodStartDate, periodEndDate, shouldFilterByPeriod, maintenanceOverrides]);
 
   const maintenanceGroups = useMemo(() => {
     if (activeModule !== 'maintenance' && activeModule !== 'concierge') return [];
@@ -292,6 +301,15 @@ export function useMaintenanceFilters({
         }
 
         if (passesDateFilter) {
+          // Filtrar checkouts ocultos (dispensados pelo usuário)
+          const checkoutItem = { type: 'checkout' as const, reservation: r };
+          const itemKey = getMaintenanceItemKey(checkoutItem);
+          const isHidden = maintenanceOverrides[itemKey]?.hidden;
+
+          if (isHidden) {
+            return; // Skip este checkout
+          }
+
           // Aplicar filtros aos checkouts
           const matchesSearch =
             searchTerm === '' ||
@@ -303,7 +321,7 @@ export function useMaintenanceFilters({
           if (matchesSearch && matchesProperty) {
             const dateKey = r.checkOutDate.split('T')[0];
             if (!scheduledMap[dateKey]) scheduledMap[dateKey] = [];
-            scheduledMap[dateKey].push({ type: 'checkout', reservation: r });
+            scheduledMap[dateKey].push(checkoutItem);
           }
         }
       });
@@ -347,7 +365,7 @@ export function useMaintenanceFilters({
       periodPreset,
       shouldFilterByPeriod,
     });
-  }, [filteredTickets, staysReservations, activeModule, filterMaintenanceType, searchTerm, filterMaintenanceProperty, periodStartDate, periodEndDate, shouldFilterByPeriod, periodPreset]);
+  }, [filteredTickets, staysReservations, activeModule, filterMaintenanceType, searchTerm, filterMaintenanceProperty, periodStartDate, periodEndDate, shouldFilterByPeriod, periodPreset, maintenanceOverrides]);
 
   const upcomingCheckouts = useMemo(() => {
     if (activeModule !== 'maintenance') return [];

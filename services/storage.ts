@@ -39,7 +39,9 @@ const COLLECTIONS = {
   BOARD_CARDS: 'board_cards',
   // Communication
   MESSAGES: 'messages',
-  CALLS: 'calls'
+  CALLS: 'calls',
+  // Maintenance Overrides
+  MAINTENANCE_OVERRIDES: 'maintenance_overrides'
 };
 
 const ensureDb = () => {
@@ -820,6 +822,48 @@ export const storageService = {
         console.error('Erro ao deletar arquivo:', error);
         // Don't throw - file might already be deleted or URL invalid
       }
+    }
+  },
+
+  // --- MAINTENANCE OVERRIDES ---
+  maintenanceOverrides: {
+    subscribe: (callback: (overrides: Record<string, { hidden: boolean; updatedAt: number }>) => void) => {
+      if (!db) return () => {};
+
+      const q = db.collection(COLLECTIONS.MAINTENANCE_OVERRIDES);
+      return q.onSnapshot((snapshot) => {
+        const overrides: Record<string, { hidden: boolean; updatedAt: number }> = {};
+        snapshot.docs.forEach(doc => {
+          const data = doc.data();
+          overrides[doc.id] = {
+            hidden: data.hidden || false,
+            updatedAt: data.updatedAt || Date.now()
+          };
+        });
+        callback(overrides);
+      }, (error) => {
+        console.error("Erro ao buscar maintenance overrides:", error);
+      });
+    },
+
+    hide: async (key: string) => {
+      ensureDb();
+      await db.collection(COLLECTIONS.MAINTENANCE_OVERRIDES).doc(key).set({
+        hidden: true,
+        updatedAt: Date.now(),
+        reason: 'dismissed_by_user'
+      });
+    },
+
+    unhide: async (key: string) => {
+      ensureDb();
+      await db.collection(COLLECTIONS.MAINTENANCE_OVERRIDES).doc(key).delete();
+    },
+
+    isHidden: async (key: string): Promise<boolean> => {
+      ensureDb();
+      const doc = await db.collection(COLLECTIONS.MAINTENANCE_OVERRIDES).doc(key).get();
+      return doc.exists && doc.data()?.hidden === true;
     }
   }
 };

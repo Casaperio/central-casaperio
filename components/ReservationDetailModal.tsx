@@ -13,6 +13,7 @@ interface ReservationDetailModalProps {
  onClose: () => void;
  onUpdateDetails: (id: string, data: Partial<Reservation>) => void;
  onDelete: (id: string) => void;
+ onDismissCheckout?: (reservation: Reservation) => void; // Para dispensar checkouts automáticos
  onAddExpense: (reservationId: string, description: string, amount: number) => void;
  onDeleteExpense: (reservationId: string, expenseId: string) => void;
 }
@@ -29,7 +30,7 @@ const normalizeGuestName = (name: string): string => {
 
 const LANGUAGES = ['Português (Brasil)', 'Inglês', 'Espanhol', 'Francês', 'Alemão', 'Outro'];
 
-const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reservation, currentUser, tickets = [], staysReservations = [], onCreateTicket, onClose, onUpdateDetails, onDelete, onAddExpense, onDeleteExpense }) => {
+const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reservation, currentUser, tickets = [], staysReservations = [], onCreateTicket, onClose, onUpdateDetails, onDelete, onDismissCheckout, onAddExpense, onDeleteExpense }) => {
 
  const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
 
@@ -281,6 +282,17 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
   if(window.confirm("ATENÇÃO: Esta ação excluirá PERMANENTEMENTE a reserva do banco de dados.\n\nTem certeza que deseja continuar?")) {
     onDelete(reservation.id);
     onClose();
+  }
+ };
+
+ const handleDismissCheckout = (e: React.MouseEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if(window.confirm("Dispensar este checkout da lista de manutenção?\n\nEle não aparecerá mais na visualização, mas a reserva será mantida no sistema.")) {
+    if (onDismissCheckout) {
+      onDismissCheckout(reservation);
+      onClose();
+    }
   }
  };
 
@@ -899,12 +911,12 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
     <div className="p-4 md:p-6 border-t border-gray-100 bg-white md:bg-gray-50 md:rounded-b-2xl fixed md:static bottom-0 left-0 right-0 z-20 pb-safe">
       
       <div className="flex justify-between gap-3 items-center">
-        <button 
+        <button
         type="button"
-        onClick={handleDelete}
+        onClick={onDismissCheckout ? handleDismissCheckout : handleDelete}
         className="text-red-500 text-sm hover:text-red-700 hover:bg-red-50 py-3 md:py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors border border-red-100"
         >
-          <Trash2 size={16} /> <span className="hidden md:inline">Excluir</span>
+          <Trash2 size={16} /> <span className="hidden md:inline">{onDismissCheckout ? 'Dispensar' : 'Excluir'}</span>
         </button>
 
         {hasChanges && (

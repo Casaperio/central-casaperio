@@ -10,10 +10,11 @@ interface TicketDetailModalProps {
  onAddExpense: (ticketId: string, description: string, amount: number) => void;
  onDeleteExpense: (ticketId: string, expenseId: string) => void;
  onDeleteTicket: (id: string) => void;
+ onDismissCheckoutTicket?: (ticket: Ticket) => void; // Para dispensar tickets automáticos de checkout
  allUsers: { name: string; role: string }[];
 }
 
-const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateStatus, onAssign, onAddExpense, onDeleteExpense, onDeleteTicket, allUsers }) => {
+const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateStatus, onAssign, onAddExpense, onDeleteExpense, onDeleteTicket, onDismissCheckoutTicket, allUsers }) => {
  const isUrgent = ticket.priority.toLowerCase().includes('urgente');
  const [showCompletionDate, setShowCompletionDate] = useState(false);
  const [completionDate, setCompletionDate] = useState(() => {
@@ -86,6 +87,15 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
   if (window.confirm("Tem certeza que deseja excluir este chamado permanentemente?")) {
    onDeleteTicket(ticket.id);
    onClose();
+  }
+ };
+
+ const handleDismiss = () => {
+  if (window.confirm("Dispensar este chamado de checkout da lista de manutenção?\n\nEle não aparecerá mais na visualização.")) {
+   if (onDismissCheckoutTicket) {
+    onDismissCheckoutTicket(ticket);
+    onClose();
+   }
   }
  };
 
@@ -367,12 +377,12 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
       {!showCompletionDate ? (
        <div className="flex flex-col-reverse md:flex-row justify-between items-center gap-3">
         
-        {/* Delete Button */}
+        {/* Delete/Dismiss Button */}
         <button
-          onClick={handleDelete}
+          onClick={ticket.isCheckoutTicket && onDismissCheckoutTicket ? handleDismiss : handleDelete}
           className="text-red-500 hover:text-red-700 text-sm font-medium px-4 py-3 md:py-2 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center gap-2 w-full md:w-auto"
         >
-          <Trash2 size={18} /> Excluir
+          <Trash2 size={18} /> {ticket.isCheckoutTicket && onDismissCheckoutTicket ? 'Dispensar' : 'Excluir'}
         </button>
 
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto justify-end">

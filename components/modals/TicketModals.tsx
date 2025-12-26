@@ -3,7 +3,7 @@ import TicketForm from '../TicketForm';
 import TicketDetailModal from '../TicketDetailModal';
 import type { Ticket, TicketStatus, Property, User, UserWithPassword, Expense, AppModule, Reservation } from '../../types';
 import { storageService } from '../../services/storage';
-import { generateId } from '../../utils';
+import { generateId, getMaintenanceItemKey } from '../../utils';
 import { CONCIERGE_SERVICE_TYPES } from '../../constants';
 
 interface TicketModalsProps {
@@ -137,7 +137,22 @@ const TicketModals: React.FC<TicketModalsProps> = ({
  const handleDeleteTicket = (id: string) => {
   storageService.tickets.delete(id);
   addLog('Exclusão', `Excluiu chamado ${id}`);
+  addNotification('Chamado Removido', 'O chamado foi excluído permanentemente', 'success');
   setSelectedTicket(null);
+ };
+
+ const handleDismissCheckoutTicket = async (ticket: Ticket) => {
+  const itemKey = getMaintenanceItemKey(ticket);
+
+  try {
+   await storageService.maintenanceOverrides.hide(itemKey);
+   addLog('Manutenção', `Dispensou ticket de checkout de ${ticket.propertyCode}`);
+   addNotification('Chamado Dispensado', 'O chamado foi removido da lista de manutenção', 'success');
+   setSelectedTicket(null);
+  } catch (error) {
+   console.error('[handleDismissCheckoutTicket] Erro ao dispensar:', error);
+   addNotification('Erro', 'Não foi possível dispensar o chamado', 'error');
+  }
  };
 
  return (
@@ -171,6 +186,7 @@ const TicketModals: React.FC<TicketModalsProps> = ({
      onAddExpense={handleAddExpense}
      onDeleteExpense={handleDeleteExpense}
      onDeleteTicket={handleDeleteTicket}
+     onDismissCheckoutTicket={selectedTicket.isCheckoutTicket ? handleDismissCheckoutTicket : undefined}
      allUsers={users}
     />
    )}

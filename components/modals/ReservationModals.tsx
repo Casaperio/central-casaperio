@@ -3,7 +3,7 @@ import ReservationForm from '../ReservationForm';
 import ReservationDetailModal from '../ReservationDetailModal';
 import type { Reservation, ReservationStatus, Property, User, Ticket, Expense } from '../../types';
 import { storageService } from '../../services/storage';
-import { generateId } from '../../utils';
+import { generateId, getMaintenanceItemKey } from '../../utils';
 
 interface ReservationModalsProps {
  showReservationForm: boolean;
@@ -91,6 +91,21 @@ const ReservationModals: React.FC<ReservationModalsProps> = ({
   setSelectedReservation((prev: Reservation | null) => (prev ? { ...prev, expenses: updatedExpenses } : null));
  };
 
+ const handleDismissCheckout = async (reservation: Reservation) => {
+  const checkoutItem = { type: 'checkout' as const, reservation };
+  const itemKey = getMaintenanceItemKey(checkoutItem);
+
+  try {
+   await storageService.maintenanceOverrides.hide(itemKey);
+   addLog('Manutenção', `Dispensou checkout de ${reservation.propertyCode} (${reservation.guestName})`);
+   addNotification('Checkout Dispensado', 'O checkout foi removido da lista de manutenção', 'success');
+   setSelectedReservation(null);
+  } catch (error) {
+   console.error('[handleDismissCheckout] Erro ao dispensar:', error);
+   addNotification('Erro', 'Não foi possível dispensar o checkout', 'error');
+  }
+ };
+
  const handleCreateTicket = () => {
   if (selectedReservation) {
    setTicketPreFill({
@@ -122,6 +137,7 @@ const ReservationModals: React.FC<ReservationModalsProps> = ({
      onClose={() => setSelectedReservation(null)}
      onUpdateDetails={handleUpdateDetails}
      onDelete={handleDelete}
+     onDismissCheckout={selectedReservation.externalId ? handleDismissCheckout : undefined}
      onAddExpense={handleAddExpense}
      onDeleteExpense={handleDeleteExpense}
     />

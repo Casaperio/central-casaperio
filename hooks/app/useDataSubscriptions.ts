@@ -48,6 +48,7 @@ export interface AppData {
   boardColumns: BoardColumn[];
   boardCards: BoardCard[];
   incomingCalls: CallSession[];
+  maintenanceOverrides: Record<string, { hidden: boolean; updatedAt: number }>;
 }
 
 export function useDataSubscriptions(
@@ -84,6 +85,9 @@ export function useDataSubscriptions(
 
   // Calls
   const [incomingCalls, setIncomingCalls] = useState<CallSession[]>([]);
+
+  // Maintenance Overrides
+  const [maintenanceOverrides, setMaintenanceOverrides] = useState<Record<string, { hidden: boolean; updatedAt: number }>>({});
 
   useEffect(() => {
     if (!isDbConnected) return;
@@ -140,6 +144,9 @@ export function useDataSubscriptions(
       });
     }
 
+    // Maintenance Overrides
+    const unsubMaintenanceOverrides = storageService.maintenanceOverrides.subscribe(setMaintenanceOverrides);
+
     return () => {
       unsubTickets();
       unsubReservations();
@@ -160,6 +167,7 @@ export function useDataSubscriptions(
       unsubBoardColumns();
       unsubBoardCards();
       unsubCalls();
+      unsubMaintenanceOverrides();
     };
   }, [isDbConnected, kioskProperty]);
 
@@ -183,5 +191,6 @@ export function useDataSubscriptions(
     boardColumns,
     boardCards,
     incomingCalls,
+    maintenanceOverrides,
   };
 }

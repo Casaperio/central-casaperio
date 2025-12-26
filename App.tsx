@@ -144,6 +144,7 @@ function AppContent() {
     boardColumns,
     boardCards,
     incomingCalls,
+    maintenanceOverrides,
   } = useDataSubscriptions(isDbConnected, kioskProperty);
 
   // Celebration Confetti State
@@ -410,6 +411,7 @@ function AppContent() {
     periodPreset,
     customStartDate,
     customEndDate,
+    maintenanceOverrides,
   });
 
   // Maintenance Pagination Hook
