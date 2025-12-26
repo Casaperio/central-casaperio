@@ -87,6 +87,42 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  const [savingNote, setSavingNote] = useState(false);
  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+ // Reservation Overrides State
+ const [loadingOverrides, setLoadingOverrides] = useState(true);
+ const [savingOverrides, setSavingOverrides] = useState(false);
+ const [isInitializing, setIsInitializing] = useState(true);
+
+ // Baseline para comparação de dirty state (snapshot inicial após merge de overrides)
+ const initialEditableRef = useRef<string | null>(null);
+ const baselineSetRef = useRef(false); // Flag: baseline já foi setado na inicialização?
+
+ // Função helper: extrai apenas campos editáveis do form (para comparação)
+ const getEditableFields = useCallback(() => {
+   return {
+     language,
+     docsSent,
+     docsSentToBuilding,
+     hasChildren,
+     wantsBedSplit,
+     flightInfo,
+     roomConfig,
+     notes,
+     specialAttention,
+     problemReported,
+     earlyCheckIn: { requested: earlyRequest, time: earlyTime, granted: earlyGranted },
+     lateCheckOut: { requested: lateRequest, time: lateTime, granted: lateGranted }
+   };
+ }, [language, docsSent, docsSentToBuilding, hasChildren, wantsBedSplit, flightInfo,
+     roomConfig, notes, specialAttention, problemReported, earlyRequest, earlyTime,
+     earlyGranted, lateRequest, lateTime, lateGranted]);
+
+ // Função helper: verifica se o form tem mudanças comparando com baseline
+ const hasFormChanges = useCallback(() => {
+   if (!initialEditableRef.current) return false;
+   const currentEditable = JSON.stringify(getEditableFields());
+   return currentEditable !== initialEditableRef.current;
+ }, [getEditableFields]);
+
  // Linked Tickets Logic
  const linkedTickets = tickets.filter(t =>
    t.reservationId === reservation.id ||
@@ -114,6 +150,75 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
 
    loadGuestNote();
  }, [reservation.guestName]);
+
+ // Carrega os overrides da reserva do Firestore
+ useEffect(() => {
+   const loadOverrides = async () => {
+     setIsInitializing(true); // Marca que está inicializando
+     baselineSetRef.current = false; // Reseta flag de baseline
+     const reservationId = reservation.id || reservation.externalId;
+     if (!reservationId) {
+       setLoadingOverrides(false);
+       setIsInitializing(false);
+       return;
+     }
+
+     try {
+       const overrides = await storageService.reservationOverrides.get(reservationId);
+       if (overrides) {
+         // Merge overrides com o estado atual
+         if (overrides.language !== undefined) setLanguage(overrides.language);
+         if (overrides.docsSent !== undefined) setDocsSent(overrides.docsSent);
+         if (overrides.docsSentToBuilding !== undefined) setDocsSentToBuilding(overrides.docsSentToBuilding);
+         if (overrides.hasChildren !== undefined) setHasChildren(overrides.hasChildren);
+         if (overrides.wantsBedSplit !== undefined) setWantsBedSplit(overrides.wantsBedSplit);
+         if (overrides.flightInfo !== undefined) setFlightInfo(overrides.flightInfo);
+         if (overrides.roomConfig !== undefined) setRoomConfig(overrides.roomConfig);
+         if (overrides.notes !== undefined) setNotes(overrides.notes);
+         if (overrides.specialAttention !== undefined) setSpecialAttention(overrides.specialAttention);
+         if (overrides.problemReported !== undefined) setProblemReported(overrides.problemReported);
+         if (overrides.earlyCheckIn !== undefined) {
+           setEarlyRequest(overrides.earlyCheckIn.requested);
+           setEarlyTime(overrides.earlyCheckIn.time);
+           setEarlyGranted(overrides.earlyCheckIn.granted);
+         }
+         if (overrides.lateCheckOut !== undefined) {
+           setLateRequest(overrides.lateCheckOut.requested);
+           setLateTime(overrides.lateCheckOut.time);
+           setLateGranted(overrides.lateCheckOut.granted);
+         }
+       }
+     } catch (error) {
+       console.error('Erro ao carregar overrides da reserva:', error);
+     } finally {
+       setLoadingOverrides(false);
+       // Aguarda um tick para garantir que todos os setStates foram processados
+       setTimeout(() => setIsInitializing(false), 0);
+     }
+   };
+
+   loadOverrides();
+ }, [reservation.id, reservation.externalId]);
+
+ // Seta o baseline inicial após carregar overrides (para comparação de dirty state)
+ useEffect(() => {
+   if (!isInitializing && !loadingOverrides && !loadingNote && !baselineSetRef.current) {
+     // Quando terminar de carregar overrides e notas, seta o baseline APENAS UMA VEZ
+     const initialEditable = JSON.stringify(getEditableFields());
+     initialEditableRef.current = initialEditable;
+     baselineSetRef.current = true; // Marca que baseline foi setado
+     setHasChanges(false);
+   }
+ }, [isInitializing, loadingOverrides, loadingNote]);
+
+ // Recalcula hasChanges quando qualquer campo editável mudar
+ useEffect(() => {
+   if (isInitializing || loadingOverrides || loadingNote) return; // Não recalcula durante inicialização/carregamento
+   const changed = hasFormChanges();
+   setHasChanges(changed);
+ }, [language, docsSent, docsSentToBuilding, hasChildren, wantsBedSplit, flightInfo,
+     roomConfig, notes, specialAttention, problemReported, earlyRequest, earlyTime,
+     earlyGranted, lateRequest, lateTime, lateGranted, isInitializing, loadingOverrides, loadingNote, hasFormChanges]);
 
  // Salva a nota no Firestore com debounce de 1 segundo
  const saveGuestNote = useCallback(async (noteText: string) => {
@@ -159,29 +264,6 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
    };
  }, []);
 
- useEffect(() => {
-  // Check for any change
-  const isChanged =
-    flightInfo !== (reservation.flightInfo || '') ||
-    roomConfig !== (reservation.roomConfig || '') ||
-    hasChildren !== (reservation.hasChildren || false) ||
-    wantsBedSplit !== (reservation.wantsBedSplit || false) ||
-    notes !== (reservation.notes || '') ||
-    language !== (reservation.language || '') ||
-    docsSent !== reservation.docsSent ||
-    docsSentToBuilding !== (reservation.docsSentToBuilding || false) ||
-    specialAttention !== (reservation.specialAttention || false) ||
-    problemReported !== (reservation.problemReported || false) ||
-    earlyRequest !== (reservation.earlyCheckIn?.requested || false) ||
-    earlyTime !== (reservation.earlyCheckIn?.time || '') ||
-    earlyGranted !== (reservation.earlyCheckIn?.granted || false) ||
-    lateRequest !== (reservation.lateCheckOut?.requested || false) ||
-    lateTime !== (reservation.lateCheckOut?.time || '') ||
-    lateGranted !== (reservation.lateCheckOut?.granted || false) ||
-    (flightData?.lastUpdated !== reservation.flightData?.lastUpdated);
-
-  setHasChanges(isChanged);
- }, [flightInfo, roomConfig, hasChildren, wantsBedSplit, notes, language, docsSent, docsSentToBuilding, specialAttention, problemReported, earlyRequest, earlyTime, earlyGranted, lateRequest, lateTime, lateGranted, reservation, flightData]);
 
  const getStatusColor = (status: ReservationStatus) => {
   switch(status) {
@@ -202,23 +284,41 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
   }
  };
 
- const handleSaveChanges = () => {
-   onUpdateDetails(reservation.id, {
-     flightInfo,
-     flightData, // Save Flight Data
-     roomConfig,
-     hasChildren,
-     wantsBedSplit,
-     notes,
-     language,
-     docsSent,
-     docsSentToBuilding,
-     specialAttention,
-     problemReported,
-     earlyCheckIn: { requested: earlyRequest, time: earlyTime, granted: earlyGranted },
-     lateCheckOut: { requested: lateRequest, time: lateTime, granted: lateGranted }
-   });
-   setHasChanges(false);
+ const handleSaveChanges = async () => {
+   setSavingOverrides(true);
+   try {
+     await storageService.reservationOverrides.set({
+       reservationId: reservation.id,
+       externalId: reservation.externalId,
+       propertyCode: reservation.propertyCode,
+       guestName: reservation.guestName,
+       language,
+       docsSent,
+       docsSentToBuilding,
+       hasChildren,
+       wantsBedSplit,
+       earlyCheckIn: { requested: earlyRequest, time: earlyTime, granted: earlyGranted },
+       lateCheckOut: { requested: lateRequest, time: lateTime, granted: lateGranted },
+       flightInfo,
+       roomConfig,
+       notes,
+       specialAttention,
+       problemReported,
+       updatedAt: Date.now(),
+       updatedBy: currentUser.name
+     });
+
+     // Atualiza o baseline para o novo estado salvo
+     const newBaseline = JSON.stringify(getEditableFields());
+     initialEditableRef.current = newBaseline;
+     baselineSetRef.current = true; // Garante que flag permanece true
+     setHasChanges(false);
+   } catch (error) {
+     console.error('Erro ao salvar overrides da reserva:', error);
+     alert('Erro ao salvar alterações. Tente novamente.');
+   } finally {
+     setSavingOverrides(false);
+   }
  };
 
  const handleFetchFlight = async () => {
@@ -808,11 +908,20 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
         </button>
 
         {hasChanges && (
-         <button 
+         <button
           onClick={handleSaveChanges}
-          className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 md:py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 shadow-sm animate-fade-in"
+          disabled={savingOverrides}
+          className={`flex-1 md:flex-none ${savingOverrides ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white px-6 py-3 md:py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 shadow-sm animate-fade-in`}
          >
-           <Save size={16} /> Salvar Alterações
+           {savingOverrides ? (
+             <>
+               <RefreshCw size={16} className="animate-spin" /> Salvando...
+             </>
+           ) : (
+             <>
+               <Save size={16} /> Salvar Alterações
+             </>
+           )}
          </button>
         )}
       </div>

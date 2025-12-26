@@ -2,7 +2,7 @@ import { db, storage } from './firebase';
 import { BoardCardAttachment } from '../types';
 import {
   Ticket, UserWithPassword, LogEntry, Property, Reservation,
-  GuestTip, GuestFeedback, GuestNote, MonitoredFlight, InventoryItem,
+  GuestTip, GuestFeedback, GuestNote, ReservationOverrides, MonitoredFlight, InventoryItem,
   InventoryTransaction, Delivery, OfficeSupply, CompanyAsset, WorkShift,
   ConciergeOffer, Supplier, ServiceTypeDefinition,
   Board, BoardColumn, BoardCard, AfterHoursConfig, ChatMessage, CallSession
@@ -20,6 +20,7 @@ const COLLECTIONS = {
   TIPS: 'tips',
   FEEDBACKS: 'feedbacks',
   GUEST_NOTES: 'guest_notes',
+  RESERVATION_OVERRIDES: 'reservation_overrides',
   MONITORED_FLIGHTS: 'monitoredFlights',
   INVENTORY_ITEMS: 'inventory_items',
   INVENTORY_TRANSACTIONS: 'inventory_transactions',
@@ -278,6 +279,31 @@ export const storageService = {
       await db.collection(COLLECTIONS.GUEST_NOTES).doc(docId).set(cleanData({
         guestKey,
         ...data
+      }), { merge: true });
+    }
+  },
+
+  // --- RESERVATION OVERRIDES ---
+  reservationOverrides: {
+    get: async (reservationId: string): Promise<ReservationOverrides | null> => {
+      ensureDb();
+      const docRef = db.collection(COLLECTIONS.RESERVATION_OVERRIDES).doc(sanitizeDocId(reservationId));
+      const doc = await docRef.get();
+      if (doc.exists) {
+        return { id: doc.id, ...doc.data() } as ReservationOverrides;
+      }
+      return null;
+    },
+
+    set: async (overrides: Omit<ReservationOverrides, 'id'>): Promise<void> => {
+      ensureDb();
+      // Preferir reservationId, fallback para externalId
+      const docId = sanitizeDocId(overrides.reservationId || overrides.externalId || '');
+      if (!docId) {
+        throw new Error('reservationId ou externalId é obrigatório');
+      }
+      await db.collection(COLLECTIONS.RESERVATION_OVERRIDES).doc(docId).set(cleanData({
+        ...overrides
       }), { merge: true });
     }
   },
