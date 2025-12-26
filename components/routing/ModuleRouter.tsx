@@ -65,6 +65,7 @@ interface ModuleRouterProps {
   staysCalendarData: any;
   selectedBoard: Board | null;
   setSelectedBoard: (board: Board | null) => void;
+  setSelectedReservation: (reservation: Reservation | null) => void;
   addLog: (action: string, details: string) => void;
   updatePropertyInState: (property: PropertyCharacteristics) => void;
   createInventoryItem: (item: Omit<InventoryItem, 'id' | 'updatedAt'>) => Promise<InventoryItem>;
@@ -106,6 +107,7 @@ export function ModuleRouter({
   staysCalendarData,
   selectedBoard,
   setSelectedBoard,
+  setSelectedReservation,
   addLog,
   updatePropertyInState,
   createInventoryItem,
@@ -328,8 +330,17 @@ export function ModuleRouter({
       <Suspense fallback={<LoadingFallback />}>
         <GeneralCalendar
           units={staysCalendarData?.units || []}
-          onReservationClick={(res) => {
-            // Handled in parent
+          onReservationClick={(calendarRes) => {
+            // Find full reservation from staysReservations using bookingId
+            const fullReservation = staysReservations.find(
+              r => r.externalId === calendarRes.bookingId || r.id === calendarRes.bookingId
+            );
+
+            if (fullReservation) {
+              setSelectedReservation(fullReservation);
+            } else {
+              console.warn('Reserva não encontrada:', calendarRes.bookingId);
+            }
           }}
         />
       </Suspense>

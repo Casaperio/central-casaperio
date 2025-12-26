@@ -739,6 +739,7 @@ function AppContent() {
              staysCalendarData={staysCalendarData}
              selectedBoard={selectedBoard}
              setSelectedBoard={setSelectedBoard}
+             setSelectedReservation={setSelectedReservation}
              addLog={addLog}
              updatePropertyInState={updatePropertyInState}
              createInventoryItem={createInventoryItem}
