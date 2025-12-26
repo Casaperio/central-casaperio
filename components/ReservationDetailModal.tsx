@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Reservation, ReservationStatus, User, FlightData, Ticket } from '../types';
-import { X, Calendar, User as UserIcon, ChevronLeft, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby } from 'lucide-react';
+import { X, Calendar, User as UserIcon, ChevronLeft, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby, Repeat } from 'lucide-react';
 import { checkFlightStatus } from '../services/geminiService';
 
 interface ReservationDetailModalProps {
  reservation: Reservation;
  currentUser: User;
  tickets?: Ticket[]; // Added to show linked tickets
+ staysReservations?: Reservation[]; // Para calcular histórico do hóspede
  onCreateTicket: () => void;
  onClose: () => void;
  onUpdateDetails: (id: string, data: Partial<Reservation>) => void;
@@ -15,11 +16,33 @@ interface ReservationDetailModalProps {
  onDeleteExpense: (reservationId: string, expenseId: string) => void;
 }
 
+// Normaliza o nome do hóspede para consistência na contagem
+const normalizeGuestName = (name: string): string => {
+  return name
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+    .replace(/\s+/g, ' '); // Colapsa múltiplos espaços
+};
+
 const LANGUAGES = ['Português (Brasil)', 'Inglês', 'Espanhol', 'Francês', 'Alemão', 'Outro'];
 
-const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reservation, currentUser, tickets = [], onCreateTicket, onClose, onUpdateDetails, onDelete, onAddExpense, onDeleteExpense }) => {
- 
+const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reservation, currentUser, tickets = [], staysReservations = [], onCreateTicket, onClose, onUpdateDetails, onDelete, onAddExpense, onDeleteExpense }) => {
+
  const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
+
+ // Calcula quantas reservas este hóspede já fez
+ const guestReservationCount = useMemo(() => {
+   if (!staysReservations.length) return 0;
+
+   const normalizedName = normalizeGuestName(reservation.guestName);
+   return staysReservations.filter(r => {
+     // Ignora reservas canceladas
+     if (r.status === 'Cancelada') return false;
+     return normalizeGuestName(r.guestName) === normalizedName;
+   }).length;
+ }, [staysReservations, reservation.guestName]);
 
  // Fields
  const [flightInfo, setFlightInfo] = useState(reservation.flightInfo || '');
@@ -246,9 +269,16 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-bold text-gray-900">{reservation.guestName}</h3>
-              <p className="text-sm text-blue-700 mt-1">
-                {reservation.guestCount} Hóspedes {reservation.hasBabies && <span className="text-xs bg-white px-2 py-0.5 rounded-full ml-2 border border-blue-200">👶 Bebê</span>}
-              </p>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <p className="text-sm text-blue-700">
+                  {reservation.guestCount} Hóspedes {reservation.hasBabies && <span className="text-xs bg-white px-2 py-0.5 rounded-full ml-2 border border-blue-200">👶 Bebê</span>}
+                </p>
+                {guestReservationCount > 0 && (
+                  <span className="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded border border-purple-200 text-purple-700 bg-white">
+                    <Repeat size={12} /> {guestReservationCount} {guestReservationCount === 1 ? 'reserva' : 'reservas'}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           

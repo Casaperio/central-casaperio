@@ -13,6 +13,7 @@ interface ReservationModalsProps {
  properties: Property[];
  currentUser: User;
  tickets: Ticket[];
+ staysReservations?: Reservation[]; // Para calcular histórico do hóspede
  onReservationSubmit: (reservation: Omit<Reservation, 'id'>) => void;
  onUpdateReservation: (id: string, updates: Partial<Reservation>) => void;
  onAddExpense: (reservationId: string, description: string, amount: number) => void;
@@ -31,6 +32,7 @@ const ReservationModals: React.FC<ReservationModalsProps> = ({
  properties,
  currentUser,
  tickets,
+ staysReservations = [],
  setTicketPreFill,
  setShowTicketForm,
  addLog,
@@ -115,6 +117,7 @@ const ReservationModals: React.FC<ReservationModalsProps> = ({
      reservation={selectedReservation}
      currentUser={currentUser}
      tickets={tickets}
+     staysReservations={staysReservations}
      onCreateTicket={handleCreateTicket}
      onClose={() => setSelectedReservation(null)}
      onUpdateDetails={handleUpdateDetails}

@@ -783,6 +783,7 @@ function AppContent() {
         properties={properties}
         currentUser={currentUser}
         tickets={tickets}
+        staysReservations={staysReservations}
         onReservationSubmit={() => {}}
         onUpdateReservation={() => {}}
         onAddExpense={() => {}}

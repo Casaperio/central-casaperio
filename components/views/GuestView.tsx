@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   CalendarClock, CalendarRange, LogIn, LogOut as LogOutIcon, Home, Languages,
-  FileX, EyeOff, DollarSign, Wrench
+  FileX, EyeOff, DollarSign, Wrench, Repeat
 } from 'lucide-react';
 import { Reservation, Ticket } from '../../types';
 import { AgendaGroup } from '../../services/staysDataMapper';
@@ -21,6 +21,16 @@ interface GuestViewProps {
   gridColumns: number;
 }
 
+// Normaliza o nome do hóspede para consistência na contagem
+const normalizeGuestName = (name: string): string => {
+  return name
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+    .replace(/\s+/g, ' '); // Colapsa múltiplos espaços
+};
+
 export const GuestView: React.FC<GuestViewProps> = ({
   staysReservations,
   staysAgendaGroups,
@@ -38,6 +48,21 @@ export const GuestView: React.FC<GuestViewProps> = ({
     if (gridColumns === 4) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4';
     return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
   };
+
+  // Calcula quantas reservas cada hóspede já fez
+  const guestReservationCount = React.useMemo(() => {
+    const countMap = new Map<string, number>();
+
+    staysReservations.forEach(reservation => {
+      // Ignora reservas canceladas na contagem
+      if (reservation.status === 'Cancelada') return;
+
+      const normalizedName = normalizeGuestName(reservation.guestName);
+      countMap.set(normalizedName, (countMap.get(normalizedName) || 0) + 1);
+    });
+
+    return countMap;
+  }, [staysReservations]);
 
   const filteredStaysAgendaGroups = React.useMemo(() => {
     if (!searchTerm) return staysAgendaGroups;
@@ -104,6 +129,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
                 <div className={`grid gap-4 ${getGridClass()}`}>
                   {group.items.map(reservation => {
                     const dailyStatus = reservation.dailyStatus;
+                    const reservationCount = guestReservationCount.get(normalizeGuestName(reservation.guestName)) || 0;
 
                     return (
                       <div
@@ -126,9 +152,16 @@ export const GuestView: React.FC<GuestViewProps> = ({
                               {reservation.channel || 'Direto'}
                             </span>
                           </div>
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded border border-gray-100 text-gray-500 bg-gray-50">
-                            {reservation.guestCount} {reservation.guestCount === 1 ? 'hóspede' : 'hóspedes'}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded border border-gray-100 text-gray-500 bg-gray-50">
+                              {reservation.guestCount} {reservation.guestCount === 1 ? 'hóspede' : 'hóspedes'}
+                            </span>
+                            {reservationCount > 0 && (
+                              <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border border-purple-100 text-purple-700 bg-purple-50">
+                                <Repeat size={10} /> {reservationCount} {reservationCount === 1 ? 'reserva' : 'reservas'}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         <div className="flex flex-wrap gap-1 mb-2">
