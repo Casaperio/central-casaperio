@@ -299,7 +299,7 @@ export function ModuleRouter({
   }
 
   if (viewMode === 'financial') {
-    return <FinancialPanel reservations={staysReservations} />;
+    return <FinancialPanel reservations={staysReservations} properties={properties} />;
   }
 
   if (viewMode === 'map') {

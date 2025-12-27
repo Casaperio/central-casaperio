@@ -7,8 +7,7 @@
 import { env } from '../env';
 
 // In development, use Vite proxy; in production, use env variable
-// Use safe access to import.meta.env or fallback
-const isDev = import.meta?.env?.DEV ?? false;
+const isDev = import.meta.env.DEV;
 const API_BASE_URL = isDev ? '' : (env.VITE_API_BASE_URL || 'https://stays-api.onrender.com');
 const API_KEY = env.VITE_API_KEY || '';
 
@@ -36,6 +35,8 @@ async function fetchApi<T>(endpoint: string, params?: Record<string, string>): P
     url = fullUrl.toString();
   }
 
+  console.log('🌐 Fetching from:', url, '| isDev:', isDev);
+
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -51,7 +52,14 @@ async function fetchApi<T>(endpoint: string, params?: Record<string, string>): P
     );
   }
 
-  return response.json() as Promise<T>;
+  const data = await response.json() as T;
+
+  // Debug: log calendar responses
+  if (endpoint.includes('/calendar')) {
+    console.log('🌐 Calendar response received, first unit:', (data as any).units?.[0]);
+  }
+
+  return data;
 }
 
 // ============ Dashboard Types ============
@@ -125,6 +133,8 @@ export interface CalendarReservation {
   babies: number;
   checkInTime: string | null;
   checkOutTime: string | null;
+  priceValue: number | null;
+  priceCurrency: string | null;
 }
 
 export interface CalendarUnit {

@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/v1': {
-        target: 'https://stays-api.onrender.com',
+        target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -24,7 +24,7 @@ export default defineConfig({
         }
       },
       '/health': {
-        target: 'https://stays-api.onrender.com',
+        target: 'http://localhost:3001',
         changeOrigin: true,
       }
     }
