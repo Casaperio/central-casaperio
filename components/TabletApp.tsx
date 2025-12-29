@@ -10,6 +10,7 @@ import {
 import GuestCommunicator from './GuestCommunicator';
 import TicketForm from './TicketForm';
 import { getWeatherForecast, WeatherData } from '../services/geminiService';
+import WeatherForecastCard from './tablet/WeatherForecastCard';
 
 interface TabletAppProps {
  propertyCode: string;
@@ -279,6 +280,9 @@ const TabletApp: React.FC<TabletAppProps> = ({
              </div>
            )}
          </div>
+
+         {/* Weather Forecast Card - Rio de Janeiro (3 days) */}
+         <WeatherForecastCard />
 
          {/* Quick Actions Grid */}
          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

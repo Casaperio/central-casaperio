@@ -166,13 +166,31 @@ const MapPanel: React.FC<MapPanelProps> = ({ properties, reservations, tickets, 
 
   filteredMarkers.forEach(m => {
    // Create Custom Icon
-   const bgColor = m.status === 'occupied' ? 'bg-red-500' : 'bg-green-500';
-   const alertBadge = m.hasAlert ? 
-    `<div class="absolute -top-2 -right-2 w-5 h-5 bg-yellow-400 rounded-full border-2 border-white flex items-center justify-center text-yellow-900 font-bold text-xs animate-bounce">!</div>` 
+   // Determinar cor baseada no status:
+   // Vermelho: check-out hoje
+   // Verde: check-in hoje
+   // Azul: in house (ocupado, mas não é check-in/out)
+   // Branco: vazio
+   let bgColor = 'bg-white';
+   let textColor = 'text-gray-700';
+
+   if (m.isCheckOut) {
+    bgColor = 'bg-red-500';
+    textColor = 'text-white';
+   } else if (m.isCheckIn) {
+    bgColor = 'bg-green-500';
+    textColor = 'text-white';
+   } else if (m.status === 'occupied') {
+    bgColor = 'bg-blue-500';
+    textColor = 'text-white';
+   }
+
+   const alertBadge = m.hasAlert ?
+    `<div class="absolute -top-2 -right-2 w-5 h-5 bg-yellow-400 rounded-full border-2 border-white flex items-center justify-center text-yellow-900 font-bold text-xs animate-bounce">!</div>`
     : '';
-   
+
    const iconHtml = `
-    <div class="relative w-8 h-8 rounded-full ${bgColor} border-2 border-white shadow-md flex items-center justify-center text-white transform hover:scale-110 transition-transform">
+    <div class="relative w-8 h-8 rounded-full ${bgColor} border-2 border-gray-300 shadow-md flex items-center justify-center ${textColor} transform hover:scale-110 transition-transform">
      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
      ${alertBadge}
     </div>
@@ -251,10 +269,10 @@ const MapPanel: React.FC<MapPanelProps> = ({ properties, reservations, tickets, 
 
     <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
      <button onClick={() => setFilter('all')} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${filter === 'all' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>Todos</button>
-     <button onClick={() => setFilter('occupied')} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${filter === 'occupied' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>Ocupados</button>
-     <button onClick={() => setFilter('vacant')} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${filter === 'vacant' ? 'bg-green-500 text-white border-green-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>Vazios</button>
-     <button onClick={() => setFilter('checkin')} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border flex items-center gap-1 ${filter === 'checkin' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}><LogIn size={12}/> Check-in</button>
-     <button onClick={() => setFilter('checkout')} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border flex items-center gap-1 ${filter === 'checkout' ? 'bg-red-100 text-red-800 border-red-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}><LogOut size={12}/> Check-out</button>
+     <button onClick={() => setFilter('occupied')} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${filter === 'occupied' ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>Ocupados</button>
+     <button onClick={() => setFilter('vacant')} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${filter === 'vacant' ? 'bg-gray-100 text-gray-800 border-gray-300' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>Vazios</button>
+     <button onClick={() => setFilter('checkin')} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border flex items-center gap-1 ${filter === 'checkin' ? 'bg-green-500 text-white border-green-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}><LogIn size={12}/> Check-in</button>
+     <button onClick={() => setFilter('checkout')} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border flex items-center gap-1 ${filter === 'checkout' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}><LogOut size={12}/> Check-out</button>
      <button onClick={() => setFilter('maintenance')} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border flex items-center gap-1 ${filter === 'maintenance' ? 'bg-orange-100 text-orange-800 border-orange-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}><AlertCircle size={12}/> Manutenção</button>
     </div>
    </div>
