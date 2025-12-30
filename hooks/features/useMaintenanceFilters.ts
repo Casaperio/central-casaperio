@@ -48,8 +48,8 @@ function orderMaintenanceGroups({
     now.setHours(0, 0, 0, 0);
     const todayTime = now.getTime();
 
-    // Janela de relevância: (hoje - 4 dias) a (hoje + 7 dias)
-    const windowStart = todayTime - (4 * 24 * 60 * 60 * 1000);
+    // Janela de relevância: hoje a (hoje + 7 dias) - sem dias passados
+    const windowStart = todayTime; // Começa exatamente hoje (00:00)
     const windowEnd = todayTime + (7 * 24 * 60 * 60 * 1000);
 
     // Grupos dentro da janela de relevância
