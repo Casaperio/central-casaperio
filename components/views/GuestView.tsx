@@ -7,6 +7,8 @@ import { Reservation, Ticket } from '../../types';
 import { AgendaGroup } from '../../services/staysDataMapper';
 import { SkeletonAgenda, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
+import PeriodFilter, { PeriodPreset } from './PeriodFilter';
+import { useGuestPeriodFilter } from '../../hooks/features/useGuestPeriodFilter';
 
 interface GuestViewProps {
   staysReservations: Reservation[];
@@ -19,6 +21,11 @@ interface GuestViewProps {
   tickets: Ticket[];
   staysLoading: boolean;
   gridColumns: number;
+  guestPeriodPreset: PeriodPreset;
+  guestCustomStartDate: string;
+  guestCustomEndDate: string;
+  onGuestPeriodPresetChange: (preset: PeriodPreset) => void;
+  onGuestCustomDateChange: (startDate: string, endDate: string) => void;
 }
 
 // Normaliza o nome do hóspede para consistência na contagem
@@ -41,13 +48,28 @@ export const GuestView: React.FC<GuestViewProps> = ({
   searchTerm,
   tickets,
   staysLoading,
-  gridColumns
+  gridColumns,
+  guestPeriodPreset,
+  guestCustomStartDate,
+  guestCustomEndDate,
+  onGuestPeriodPresetChange,
+  onGuestCustomDateChange
 }) => {
   const getGridClass = () => {
     if (gridColumns === 2) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2';
     if (gridColumns === 4) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4';
     return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
   };
+
+  // Hook para filtrar e agrupar reservas por período
+  const { filteredAgendaGroups } = useGuestPeriodFilter({
+    staysReservations,
+    staysAgendaGroups,
+    periodPreset: guestPeriodPreset,
+    customStartDate: guestCustomStartDate,
+    customEndDate: guestCustomEndDate,
+    searchTerm,
+  });
 
   // Calcula quantas reservas cada hóspede já fez
   const guestReservationCount = React.useMemo(() => {
@@ -64,25 +86,23 @@ export const GuestView: React.FC<GuestViewProps> = ({
     return countMap;
   }, [staysReservations]);
 
-  const filteredStaysAgendaGroups = React.useMemo(() => {
-    if (!searchTerm) return staysAgendaGroups;
-
-    return staysAgendaGroups.map(group => ({
-      ...group,
-      items: group.items.filter(r =>
-        r.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.propertyCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.channel?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    })).filter(group => group.items.length > 0);
-  }, [staysAgendaGroups, searchTerm]);
-
   if (viewMode !== 'cards' && viewMode !== 'list' && viewMode !== 'calendar') {
     return null;
   }
 
   return (
     <div className={viewMode === 'cards' ? "space-y-8" : "space-y-4"}>
+      {/* Filtro de Período - Somente para modos Cards e Lista */}
+      {(viewMode === 'cards' || viewMode === 'list') && (
+        <PeriodFilter
+          selectedPreset={guestPeriodPreset}
+          customStartDate={guestCustomStartDate}
+          customEndDate={guestCustomEndDate}
+          onPresetChange={onGuestPeriodPresetChange}
+          onCustomDateChange={onGuestCustomDateChange}
+        />
+      )}
+
       {staysLoading ? (
         viewMode === 'cards' ? (
           <SkeletonAgenda />
@@ -109,12 +129,12 @@ export const GuestView: React.FC<GuestViewProps> = ({
           onItemClick={setSelectedReservation}
         />
       ) : viewMode === 'cards' ? (
-        filteredStaysAgendaGroups.length === 0 ? (
+        filteredAgendaGroups.length === 0 ? (
           <div className="p-8 text-center text-gray-400 bg-white border border-gray-200 border-dashed rounded-lg">
             Nenhuma reserva encontrada.
           </div>
         ) : (
-          filteredStaysAgendaGroups.map(group => (
+          filteredAgendaGroups.map(group => (
             <div key={group.date} className="animate-fade-in">
               <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${group.isToday ? 'text-blue-600' : 'text-gray-600'}`}>
                 <CalendarClock size={16}/>
@@ -227,46 +247,87 @@ export const GuestView: React.FC<GuestViewProps> = ({
           ))
         )
       ) : (
-        staysReservations
-          .filter(reservation =>
-            !searchTerm ||
-            reservation.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            reservation.propertyCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            reservation.channel?.toLowerCase().includes(searchTerm.toLowerCase())
-          )
-          .map(reservation => (
-          <div
-            key={reservation.id}
-            onClick={() => setSelectedReservation(reservation)}
-            className="flex items-center justify-between p-3 transition-colors bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50"
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-gray-900">{reservation.propertyCode}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-gray-500 truncate max-w-[200px]">{reservation.guestName}</p>
-                {!reservation.docsSent && <div title="Documentação pendente"><FileX size={12} className="text-red-500" /></div>}
-                {!reservation.maintenanceAck?.seen && <div title="Manutenção não vista"><EyeOff size={12} className="text-orange-500" /></div>}
-                {reservation.expenses && reservation.expenses.length > 0 && <div title={`R$ ${reservation.expenses.reduce((sum, exp) => sum + exp.amount, 0).toFixed(0)} em despesas`}><DollarSign size={12} className="text-yellow-500" /></div>}
-                {reservation.language && <span className="text-[10px] text-blue-600 font-semibold uppercase" title={`Idioma: ${reservation.language}`}>{reservation.language}</span>}
-                {(() => {
-                  const relatedTickets = tickets.filter(t =>
-                    t.propertyCode === reservation.propertyCode &&
-                    ((t.scheduledDate && new Date(t.scheduledDate) >= new Date(reservation.checkInDate) && new Date(t.scheduledDate) <= new Date(reservation.checkOutDate)) ||
-                     (t.desiredDate && new Date(t.desiredDate) >= new Date(reservation.checkInDate) && new Date(t.desiredDate) <= new Date(reservation.checkOutDate)))
-                  );
-                  return relatedTickets.length > 0 && <div title={`${relatedTickets.length} chamado(s)`}><Wrench size={12} className="text-blue-500" /></div>;
-                })()}
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-medium text-gray-900">
-                {new Date(reservation.checkInDate).toLocaleDateString('pt-BR')}
-              </p>
-            </div>
+        // Modo Lista - Usa a mesma fonte dos Cards (filteredAgendaGroups)
+        filteredAgendaGroups.length === 0 ? (
+          <div className="p-8 text-center text-gray-400 bg-white border border-gray-200 border-dashed rounded-lg">
+            Nenhuma reserva encontrada.
           </div>
-        ))
+        ) : (
+          filteredAgendaGroups.map(group => (
+            <div key={group.date} className="space-y-2 animate-fade-in">
+              {/* Header do grupo de data - igual aos Cards */}
+              <h3 className={`text-sm font-bold uppercase tracking-wider mb-2 flex items-center gap-2 ${group.isToday ? 'text-blue-600' : 'text-gray-600'}`}>
+                <CalendarClock size={16}/>
+                {group.label}
+                <span className="ml-2 text-xs font-normal text-gray-400">{new Date(group.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+              </h3>
+
+              {/* Lista de reservas do grupo - mesma ordem dos Cards */}
+              {group.items.map(reservation => {
+                const dailyStatus = reservation.dailyStatus;
+                const reservationCount = guestReservationCount.get(normalizeGuestName(reservation.guestName)) || 0;
+
+                return (
+                  <div
+                    key={reservation.id}
+                    onClick={() => setSelectedReservation(reservation)}
+                    className="flex items-center justify-between p-3 transition-colors bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 relative"
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {/* Badge de tipo - igual aos Cards */}
+                      {dailyStatus === 'CHECKOUT' && (
+                        <div className="flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 text-[10px] font-bold rounded">
+                          <LogOutIcon size={10} /> CHECK-OUT
+                        </div>
+                      )}
+                      {dailyStatus === 'CHECKIN' && (
+                        <div className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded">
+                          <LogIn size={10} /> CHECK-IN
+                        </div>
+                      )}
+                      {dailyStatus === 'INHOUSE' && (
+                        <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-[10px] font-bold rounded">
+                          <Home size={10} /> IN-HOUSE
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{reservation.propertyCode}</span>
+                        <p className="text-xs text-gray-500 truncate max-w-[200px]">{reservation.guestName}</p>
+                      </div>
+
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {!reservation.docsSent && <div title="Documentação pendente"><FileX size={12} className="text-red-500" /></div>}
+                        {!reservation.maintenanceAck?.seen && <div title="Manutenção não vista"><EyeOff size={12} className="text-orange-500" /></div>}
+                        {reservation.expenses && reservation.expenses.length > 0 && <div title={`R$ ${reservation.expenses.reduce((sum, exp) => sum + exp.amount, 0).toFixed(0)} em despesas`}><DollarSign size={12} className="text-yellow-500" /></div>}
+                        {reservation.language && <span className="text-[10px] text-blue-600 font-semibold uppercase" title={`Idioma: ${reservation.language}`}>{reservation.language}</span>}
+                        {reservationCount > 0 && (
+                          <span className="flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-purple-100 text-purple-700 bg-purple-50 whitespace-nowrap">
+                            <Repeat size={10} /> {reservationCount}
+                          </span>
+                        )}
+                        {(() => {
+                          const relatedTickets = tickets.filter(t =>
+                            t.propertyCode === reservation.propertyCode &&
+                            ((t.scheduledDate && new Date(t.scheduledDate) >= new Date(reservation.checkInDate) && new Date(t.scheduledDate) <= new Date(reservation.checkOutDate)) ||
+                             (t.desiredDate && new Date(t.desiredDate) >= new Date(reservation.checkInDate) && new Date(t.desiredDate) <= new Date(reservation.checkOutDate)))
+                          );
+                          return relatedTickets.length > 0 && <div title={`${relatedTickets.length} chamado(s)`}><Wrench size={12} className="text-blue-500" /></div>;
+                        })()}
+                      </div>
+                    </div>
+
+                    <div className="text-right ml-2 whitespace-nowrap">
+                      <p className="text-xs font-medium text-gray-900">
+                        {new Date(reservation.checkInDate).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))
+        )
       )}
     </div>
   );

@@ -273,6 +273,11 @@ function AppContent() {
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
 
+  // Guest Period Filter (default: 'all' - sem filtro)
+  const [guestPeriodPreset, setGuestPeriodPreset] = useState<PeriodPreset>('all');
+  const [guestCustomStartDate, setGuestCustomStartDate] = useState<string>('');
+  const [guestCustomEndDate, setGuestCustomEndDate] = useState<string>('');
+
   // Initialize Firebase on app mount
   useEffect(() => {
     initializeFirebase();
@@ -387,7 +392,7 @@ function AppContent() {
     activateTablet(propertyCode);
   };
 
-  // Handlers para filtro de período
+  // Handlers para filtro de período (Manutenção)
   const handlePeriodPresetChange = (preset: PeriodPreset): void => {
     setPeriodPreset(preset);
   };
@@ -395,6 +400,16 @@ function AppContent() {
   const handleCustomDateChange = (startDate: string, endDate: string): void => {
     setCustomStartDate(startDate);
     setCustomEndDate(endDate);
+  };
+
+  // Handlers para filtro de período (Guest)
+  const handleGuestPeriodPresetChange = (preset: PeriodPreset): void => {
+    setGuestPeriodPreset(preset);
+  };
+
+  const handleGuestCustomDateChange = (startDate: string, endDate: string): void => {
+    setGuestCustomStartDate(startDate);
+    setGuestCustomEndDate(endDate);
   };
 
 
@@ -682,6 +697,11 @@ function AppContent() {
                tickets={tickets}
                staysLoading={staysLoading}
                gridColumns={gridColumns}
+               guestPeriodPreset={guestPeriodPreset}
+               guestCustomStartDate={guestCustomStartDate}
+               guestCustomEndDate={guestCustomEndDate}
+               onGuestPeriodPresetChange={handleGuestPeriodPresetChange}
+               onGuestCustomDateChange={handleGuestCustomDateChange}
              />
            )}
 
