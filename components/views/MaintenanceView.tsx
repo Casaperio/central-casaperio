@@ -122,8 +122,9 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
 
   return (
     <div className={viewMode === 'cards' ? "space-y-8" : "space-y-4"}>
-      {activeModule === 'maintenance' && (
-        <div className="space-y-3 mb-4">
+      {/* Filtro de Período - Para Manutenção e Concierge */}
+      {(activeModule === 'maintenance' || activeModule === 'concierge') && (
+        <div className="mb-4">
           <PeriodFilter
             selectedPreset={periodPreset}
             customStartDate={customStartDate}
@@ -131,6 +132,12 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
             onPresetChange={onPeriodPresetChange}
             onCustomDateChange={onCustomDateChange}
           />
+        </div>
+      )}
+
+      {/* Filtro de Tipo - Somente para Manutenção */}
+      {activeModule === 'maintenance' && (
+        <div className="mb-4">
           <TypeFilter
             filterMaintenanceType={filterMaintenanceType}
             setFilterMaintenanceType={setFilterMaintenanceType}
