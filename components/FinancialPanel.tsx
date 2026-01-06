@@ -13,7 +13,6 @@ import {
 import { useFinancialData } from '../hooks/useFinancialData';
 import { usePeriodFilter } from '../hooks/usePeriodFilter';
 import { PeriodFilter } from './PeriodFilter';
-import { PropertyView } from './PropertyView';
 import FinancialDetailsTable from './FinancialDetailsTable';
 
 interface FinancialPanelProps {
@@ -32,13 +31,13 @@ const shortenName = (name: string | null | undefined) => {
   return name;
 };
 
-type TabType = 'overview' | 'by-property';
-
 const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations, properties }) => {
  const [sameStoreFilter, setSameStoreFilter] = useState(false);
  const [revenueDistPeriod, setRevenueDistPeriod] = useState<'current' | 'lastMonth' | 'sameLastYear' | 'ytd'>('current');
  const [showAllProfitable, setShowAllProfitable] = useState(false);
- const [activeTab, setActiveTab] = useState<TabType>('overview');
+ const [selectedProperties, setSelectedProperties] = useState<string[]>([]);
+ const [propertySearchQuery, setPropertySearchQuery] = useState('');
+ const [isPropertyDropdownOpen, setIsPropertyDropdownOpen] = useState(false);
 
  // Period Filter Hook
  const { preset, from, to, setPreset, setCustomPeriod } = usePeriodFilter();
@@ -153,14 +152,95 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations, propertie
 
  const { chartData, pieData, topProps } = processFinancials;
 
+ // Filtrar dados da API baseado nos imóveis selecionados
+ const filteredApiData = useMemo(() => {
+   // Se não houver imóveis selecionados, retorna dados originais
+   if (selectedProperties.length === 0) {
+     return {
+       byProperty: apiByProperty,
+       summary: apiSummary,
+     };
+   }
+
+   // Filtrar dados por imóveis selecionados
+   const filteredByProperty = apiByProperty.filter(p =>
+     selectedProperties.includes(p.propertyCode)
+   );
+
+   // Recalcular summary baseado nos imóveis filtrados
+   if (filteredByProperty.length === 0 || !apiSummary) {
+     return {
+       byProperty: filteredByProperty,
+       summary: apiSummary,
+     };
+   }
+
+   // Somar métricas dos imóveis filtrados
+   const totalRevenue = filteredByProperty.reduce((sum, p) => sum + p.revenue, 0);
+   const totalNights = filteredByProperty.reduce((sum, p) => sum + p.nights, 0);
+   const totalBookings = filteredByProperty.reduce((sum, p) => sum + p.bookingsCount, 0);
+
+   // Calcular ADR médio ponderado
+   const averageDailyRate = totalNights > 0 ? totalRevenue / totalNights : 0;
+
+   // Para ocupação, precisamos somar as noites totais disponíveis
+   // Como não temos esse dado agregado, vamos manter a ocupação do summary original
+   // ou calcular uma média ponderada
+   const totalOccupiedNights = filteredByProperty.reduce((sum, p) => sum + p.nights, 0);
+   const weightedOccupancy = filteredByProperty.reduce((sum, p) =>
+     sum + (p.occupancyRate * p.nights), 0) / (totalNights || 1);
+
+   const recalculatedSummary = {
+     ...apiSummary,
+     averageDailyRate,
+     occupancyRate: weightedOccupancy,
+     totalNights: totalOccupiedNights,
+     reservationsCount: totalBookings,
+     revPAR: averageDailyRate * (weightedOccupancy / 100),
+   };
+
+   return {
+     byProperty: filteredByProperty,
+     summary: recalculatedSummary,
+   };
+ }, [apiByProperty, apiSummary, selectedProperties]);
+
+ // Filtrar propriedades baseado na busca
+ const filteredPropertiesForSelection = useMemo(() => {
+   if (!propertySearchQuery) return properties;
+
+   const query = propertySearchQuery.toLowerCase();
+   return properties.filter(
+     (p) =>
+       p.code.toLowerCase().includes(query) ||
+       p.address?.toLowerCase().includes(query)
+   );
+ }, [properties, propertySearchQuery]);
+
+ // Funções para manipular seleção de imóveis
+ const togglePropertySelection = (propertyCode: string) => {
+   setSelectedProperties(prev => {
+     if (prev.includes(propertyCode)) {
+       return prev.filter(code => code !== propertyCode);
+     } else {
+       return [...prev, propertyCode];
+     }
+   });
+ };
+
+ const clearPropertySelection = () => {
+   setSelectedProperties([]);
+   setPropertySearchQuery('');
+ };
+
  // Use API trend data if available, otherwise use local chart data
  const trendChartData = apiTrend.length > 0
   ? apiTrend.map(t => ({ name: t.month, receita: t.revenue }))
   : chartData;
 
- // Use API by-property data if available
- const topPropsData = apiByProperty.length > 0
-  ? apiByProperty.map(p => ({
+ // Use filtered API by-property data if available
+ const topPropsData = filteredApiData.byProperty.length > 0
+  ? filteredApiData.byProperty.map(p => ({
     name: shortenName(p.propertyCode),
     fullName: p.propertyCode,
     value: p.revenue
@@ -231,6 +311,97 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations, propertie
      onCustomPeriodChange={setCustomPeriod}
    />
 
+   {/* Seleção de Imóveis (Multi-select) */}
+   <div className="bg-white p-4 rounded-none border border-gray-200 shadow-sm">
+     <div className="flex items-center justify-between mb-3">
+       <div className="flex items-center gap-2">
+         <Home size={16} className="text-gray-600" />
+         <h4 className="text-sm font-semibold text-gray-700">
+           Filtrar por Imóvel{selectedProperties.length > 0 && ` (${selectedProperties.length} selecionado${selectedProperties.length > 1 ? 's' : ''})`}
+         </h4>
+       </div>
+       {selectedProperties.length > 0 && (
+         <button
+           onClick={clearPropertySelection}
+           className="text-xs text-red-600 hover:text-red-800 font-medium"
+         >
+           Limpar seleção
+         </button>
+       )}
+     </div>
+
+     <div className="relative">
+       <input
+         type="text"
+         placeholder="Buscar imóveis por código ou endereço..."
+         value={propertySearchQuery}
+         onChange={(e) => setPropertySearchQuery(e.target.value)}
+         onFocus={() => setIsPropertyDropdownOpen(true)}
+         className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-brand-500"
+       />
+
+       {isPropertyDropdownOpen && (
+         <>
+           {/* Overlay para fechar dropdown */}
+           <div
+             className="fixed inset-0 z-10"
+             onClick={() => setIsPropertyDropdownOpen(false)}
+           />
+
+           {/* Dropdown de imóveis */}
+           <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-64 overflow-y-auto">
+             {filteredPropertiesForSelection.length === 0 ? (
+               <div className="p-4 text-sm text-gray-500 text-center">
+                 Nenhum imóvel encontrado
+               </div>
+             ) : (
+               filteredPropertiesForSelection.map((prop) => (
+                 <label
+                   key={prop.code}
+                   className="flex items-center gap-2 px-3 py-2 hover:bg-brand-50 cursor-pointer border-b border-gray-100 last:border-0"
+                 >
+                   <input
+                     type="checkbox"
+                     checked={selectedProperties.includes(prop.code)}
+                     onChange={() => togglePropertySelection(prop.code)}
+                     className="rounded text-brand-600 focus:ring-brand-500"
+                   />
+                   <div className="flex-1">
+                     <div className="text-sm font-medium text-gray-900">{prop.code}</div>
+                     {prop.address && (
+                       <div className="text-xs text-gray-500">{prop.address}</div>
+                     )}
+                   </div>
+                 </label>
+               ))
+             )}
+           </div>
+         </>
+       )}
+     </div>
+   </div>
+
+   {/* Banner informativo quando há filtro ativo */}
+   {selectedProperties.length > 0 && (
+     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+       <div className="flex items-center gap-2">
+         <Home size={16} className="text-blue-600" />
+         <span className="text-sm text-blue-800 font-medium">
+           Filtrando por {selectedProperties.length} imóvel{selectedProperties.length > 1 ? 'is' : ''}
+         </span>
+         <span className="text-xs text-blue-600">
+           ({selectedProperties.join(', ')})
+         </span>
+       </div>
+       <button
+         onClick={clearPropertySelection}
+         className="text-xs text-blue-600 hover:text-blue-800 font-medium underline"
+       >
+         Limpar filtro
+       </button>
+     </div>
+   )}
+
    {/* Error Display */}
    {apiError && (
     <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
@@ -238,35 +409,8 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations, propertie
     </div>
    )}
 
-   {/* Tabs */}
-   <div className="border-b border-gray-200">
-     <div className="flex gap-1">
-       <button
-         onClick={() => setActiveTab('overview')}
-         className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-           activeTab === 'overview'
-             ? 'border-brand-500 text-brand-600'
-             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-         }`}
-       >
-         Visão Geral
-       </button>
-       <button
-         onClick={() => setActiveTab('by-property')}
-         className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-           activeTab === 'by-property'
-             ? 'border-brand-500 text-brand-600'
-             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-         }`}
-       >
-         Por Imóvel
-       </button>
-     </div>
-   </div>
-
-   {/* Tab Content - Overview */}
-   {activeTab === 'overview' && (
-     <>
+   {/* Visão Geral - Sempre visível */}
+   <>
        {/* KPI Cards - Now using API data */}
        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Monthly Revenue */}
@@ -341,7 +485,7 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations, propertie
        </div>
 
        {/* API Metrics Section */}
-       {apiSummary && (
+       {filteredApiData.summary && (
         <div className="space-y-4">
          <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -364,7 +508,7 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations, propertie
            <div className="flex justify-between items-start mb-2">
             <div>
              <p className="text-sm text-gray-500 font-medium">ADR (Diária Média)</p>
-             <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(apiSummary.averageDailyRate)}</h3>
+             <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(filteredApiData.summary.averageDailyRate)}</h3>
             </div>
             <div className="bg-purple-50 text-purple-600 p-1.5 rounded-lg">
              <BarChart3 size={20} />
@@ -378,7 +522,7 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations, propertie
            <div className="flex justify-between items-start mb-2">
             <div>
              <p className="text-sm text-gray-500 font-medium">RevPAR</p>
-             <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(apiSummary.revPAR)}</h3>
+             <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(filteredApiData.summary.revPAR)}</h3>
             </div>
             <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-lg">
              <DollarSign size={20} />
@@ -392,13 +536,13 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations, propertie
            <div className="flex justify-between items-start mb-2">
             <div>
              <p className="text-sm text-gray-500 font-medium">Taxa de Ocupação</p>
-             <h3 className="text-2xl font-heading font-bold text-gray-900">{apiSummary.occupancyRate.toFixed(1)}%</h3>
+             <h3 className="text-2xl font-heading font-bold text-gray-900">{filteredApiData.summary.occupancyRate.toFixed(1)}%</h3>
             </div>
             <div className="bg-teal-50 text-teal-600 p-1.5 rounded-lg">
              <Percent size={20} />
             </div>
            </div>
-           <p className="text-xs text-gray-400">{apiSummary.totalNights} noites ocupadas de {apiSummary.availableNights}</p>
+           <p className="text-xs text-gray-400">{filteredApiData.summary.totalNights} noites ocupadas de {filteredApiData.summary.availableNights}</p>
           </div>
 
           {/* Total Reservations */}
@@ -406,7 +550,7 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations, propertie
            <div className="flex justify-between items-start mb-2">
             <div>
              <p className="text-sm text-gray-500 font-medium">Total Reservas</p>
-             <h3 className="text-2xl font-heading font-bold text-gray-900">{apiSummary.reservationsCount}</h3>
+             <h3 className="text-2xl font-heading font-bold text-gray-900">{filteredApiData.summary.reservationsCount}</h3>
             </div>
             <div className="bg-orange-50 text-orange-600 p-1.5 rounded-lg">
              <Home size={20} />
@@ -515,21 +659,9 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations, propertie
 
        {/* Detailed Financial Table */}
        <div className="mt-8">
-        <FinancialDetailsTable from={from} to={to} />
+        <FinancialDetailsTable from={from} to={to} selectedPropertyCodes={selectedProperties} />
        </div>
      </>
-   )}
-
-   {/* Tab Content - By Property */}
-   {activeTab === 'by-property' && (
-     <PropertyView
-       reservations={reservations}
-       properties={properties}
-       from={from}
-       to={to}
-       loading={isLoading}
-     />
-   )}
 
   </div>
  );

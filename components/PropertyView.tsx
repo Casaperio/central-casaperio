@@ -26,6 +26,7 @@ interface PropertyViewProps {
   from: string;
   to: string;
   loading?: boolean;
+  selectedPropertyCodes?: string[]; // Lista de códigos de imóveis pré-selecionados (modo multi)
 }
 
 /**
@@ -76,12 +77,17 @@ export const PropertyView: React.FC<PropertyViewProps> = ({
   from,
   to,
   loading = false,
+  selectedPropertyCodes = [], // Modo multi-seleção (se fornecido)
 }) => {
   const [selectedPropertyCode, setSelectedPropertyCode] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [propertyFinancials, setPropertyFinancials] = useState<PropertyFinancials[]>([]);
   const [apiReservations, setApiReservations] = useState<CalendarReservationWithProperty[]>([]);
   const [financialsLoading, setFinancialsLoading] = useState(false);
+
+  // Modo multi-seleção: se selectedPropertyCodes tiver itens, usar ele; senão usar seleção manual
+  const isMultiMode = selectedPropertyCodes.length > 0;
+  const propertiesToShow = isMultiMode ? selectedPropertyCodes : (selectedPropertyCode ? [selectedPropertyCode] : []);
 
   // Buscar dados financeiros e reservas da API quando o período mudar
   useEffect(() => {
@@ -146,15 +152,15 @@ export const PropertyView: React.FC<PropertyViewProps> = ({
     );
   }, [properties, searchQuery]);
 
-  // Busca dados financeiros do imóvel selecionado da API
-  const propertyKPIs = useMemo(() => {
-    if (!selectedPropertyCode || propertyFinancials.length === 0) {
+  // Função para buscar KPIs de um imóvel específico
+  const getPropertyKPIs = (propertyCode: string) => {
+    if (!propertyCode || propertyFinancials.length === 0) {
       return null;
     }
 
-    // Encontrar dados financeiros do imóvel selecionado
+    // Encontrar dados financeiros do imóvel
     const financialData = propertyFinancials.find(
-      (pf) => pf.propertyCode === selectedPropertyCode
+      (pf) => pf.propertyCode === propertyCode
     );
 
     if (!financialData) {
@@ -171,10 +177,9 @@ export const PropertyView: React.FC<PropertyViewProps> = ({
     }
 
     // Calcular RevPAR (Revenue Per Available Room)
-    // Se não vier da API, calcular: ADR * (Occupancy / 100)
     const revPAR = financialData.averageDailyRate * (financialData.occupancyRate / 100);
 
-    // Criar dados mensais vazios por enquanto (pode ser implementado depois)
+    // Criar dados mensais vazios por enquanto
     const monthlyData: Array<{ name: string; receita: number }> = [];
 
     return {
@@ -184,75 +189,258 @@ export const PropertyView: React.FC<PropertyViewProps> = ({
       revPAR,
       reservationsCount: financialData.bookingsCount,
       totalNights: financialData.nights,
-      availableDays: 0, // Não disponível na API atualmente
+      availableDays: 0,
       monthlyData,
     };
-  }, [selectedPropertyCode, propertyFinancials]);
+  };
 
   const formatCurrency = (val: number) =>
     val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  // Filtrar reservas para a tabela - usando dados da API
-  const propertyReservations = useMemo(() => {
-    if (!selectedPropertyCode) return [];
+  // Função para obter reservas de um imóvel específico
+  const getPropertyReservations = (propertyCode: string) => {
+    if (!propertyCode) return [];
 
-    // Filtrar reservas da propriedade selecionada vindas da API
+    // Filtrar reservas da propriedade vindas da API
     const filtered = apiReservations.filter(
-      (res) => res.propertyCode === selectedPropertyCode
+      (res) => res.propertyCode === propertyCode
     );
 
-    // Debug: verificar reservas filtradas
-    console.log('🔍 Property selected:', selectedPropertyCode);
-    console.log('🔍 Filtered reservations:', filtered.length);
-    console.log('🔍 First filtered reservation:', filtered[0]);
-
     return filtered;
-  }, [selectedPropertyCode, apiReservations]);
+  };
+
+  // Componente interno para renderizar KPIs e tabela de um imóvel
+  const renderPropertyData = (propertyCode: string) => {
+    const propertyKPIs = getPropertyKPIs(propertyCode);
+    const propertyReservations = getPropertyReservations(propertyCode);
+
+    if (!propertyKPIs) return null;
+
+    return (
+      <div key={propertyCode} className="space-y-6">
+        {/* Título do imóvel (apenas no modo multi) */}
+        {isMultiMode && (
+          <div className="bg-gray-50 p-4 rounded border border-gray-200">
+            <h3 className="text-lg font-bold text-gray-900">{propertyCode}</h3>
+            {properties.find(p => p.code === propertyCode)?.address && (
+              <p className="text-sm text-gray-600 mt-1">
+                {properties.find(p => p.code === propertyCode)?.address}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* No Data State */}
+        {propertyKPIs.reservationsCount === 0 && (
+          <div className="bg-white p-8 rounded-none border border-gray-200 shadow-sm text-center">
+            <Calendar size={48} className="text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500">
+              Nenhuma reserva encontrada para <strong>{propertyCode}</strong> no período selecionado
+            </p>
+          </div>
+        )}
+
+        {/* KPIs do Imóvel */}
+        {propertyKPIs.reservationsCount > 0 && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {/* Receita */}
+              <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium">Receita (Período)</p>
+                    <h3 className="text-2xl font-heading font-bold text-gray-900">
+                      {formatCurrency(propertyKPIs.revenue)}
+                    </h3>
+                  </div>
+                  <div className="bg-green-50 text-green-600 p-1.5 rounded-lg">
+                    <DollarSign size={20} />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">{propertyKPIs.reservationsCount} reservas</p>
+              </div>
+
+              {/* ADR */}
+              <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium">ADR (Diária Média)</p>
+                    <h3 className="text-2xl font-heading font-bold text-gray-900">
+                      {formatCurrency(propertyKPIs.adr)}
+                    </h3>
+                  </div>
+                  <div className="bg-purple-50 text-purple-600 p-1.5 rounded-lg">
+                    <BarChart3 size={20} />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">Average Daily Rate</p>
+              </div>
+
+              {/* Ocupação */}
+              <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium">Taxa de Ocupação</p>
+                    <h3 className="text-2xl font-heading font-bold text-gray-900">
+                      {propertyKPIs.occupancy.toFixed(1)}%
+                    </h3>
+                  </div>
+                  <div className="bg-teal-50 text-teal-600 p-1.5 rounded-lg">
+                    <Percent size={20} />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">
+                  {propertyKPIs.totalNights} de {propertyKPIs.availableDays} dias
+                </p>
+              </div>
+
+              {/* RevPAR */}
+              <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium">RevPAR</p>
+                    <h3 className="text-2xl font-heading font-bold text-gray-900">
+                      {formatCurrency(propertyKPIs.revPAR)}
+                    </h3>
+                  </div>
+                  <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-lg">
+                    <DollarSign size={20} />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">Revenue Per Available Room</p>
+              </div>
+
+              {/* Total Reservas */}
+              <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium">Total Reservas</p>
+                    <h3 className="text-2xl font-heading font-bold text-gray-900">
+                      {propertyKPIs.reservationsCount}
+                    </h3>
+                  </div>
+                  <div className="bg-orange-50 text-orange-600 p-1.5 rounded-lg">
+                    <Home size={20} />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">No período selecionado</p>
+              </div>
+            </div>
+
+            {/* Tabela de Reservas do Imóvel */}
+            <div className="bg-white p-6 rounded-none border border-gray-200 shadow-sm">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">
+                Reservas - {propertyCode}
+              </h3>
+
+              {propertyReservations.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  Nenhuma reserva encontrada para este imóvel no período.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Hóspede
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Check-in
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Check-out
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Noites
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Canal
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                          Valor Total
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {propertyReservations.map((res) => {
+                        const checkIn = new Date(res.startDate);
+                        const checkOut = new Date(res.endDate);
+
+                        return (
+                          <tr key={res.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-gray-900">{res.guestName}</td>
+                            <td className="px-4 py-3 text-gray-700">
+                              {checkIn.toLocaleDateString('pt-BR')}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700">
+                              {checkOut.toLocaleDateString('pt-BR')}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700">{res.nights}</td>
+                            <td className="px-4 py-3 text-gray-700">{res.platform || 'Direto'}</td>
+                            <td className="px-4 py-3 text-right font-semibold text-green-700">
+                              {formatCurrency(res.priceValue || 0)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
-      {/* Seletor de Imóvel */}
-      <div className="bg-white p-4 rounded-none border border-gray-200 shadow-sm">
-        <div className="flex items-center gap-2 mb-3">
-          <Home size={16} className="text-gray-600" />
-          <h4 className="text-sm font-semibold text-gray-700">Selecione um Imóvel</h4>
-        </div>
+      {/* Seletor de Imóvel - Apenas no modo single (não-multi) */}
+      {!isMultiMode && (
+        <div className="bg-white p-4 rounded-none border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <Home size={16} className="text-gray-600" />
+            <h4 className="text-sm font-semibold text-gray-700">Selecione um Imóvel</h4>
+          </div>
 
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Buscar por código ou endereço..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-        </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Buscar por código ou endereço..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
 
-        <div className="mt-3 max-h-48 overflow-y-auto border border-gray-200 rounded">
-          {filteredProperties.length === 0 ? (
-            <div className="p-4 text-sm text-gray-500 text-center">
-              Nenhum imóvel encontrado
-            </div>
-          ) : (
-            filteredProperties.map((prop) => (
-              <button
-                key={prop.code}
-                onClick={() => setSelectedPropertyCode(prop.code)}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-brand-50 border-b border-gray-100 last:border-0 transition-colors ${
-                  selectedPropertyCode === prop.code
-                    ? 'bg-brand-100 font-medium text-brand-900'
-                    : 'text-gray-700'
-                }`}
-              >
-                <div className="font-medium">{prop.code}</div>
-                {prop.address && (
-                  <div className="text-xs text-gray-500 mt-0.5">{prop.address}</div>
-                )}
-              </button>
-            ))
-          )}
+          <div className="mt-3 max-h-48 overflow-y-auto border border-gray-200 rounded">
+            {filteredProperties.length === 0 ? (
+              <div className="p-4 text-sm text-gray-500 text-center">
+                Nenhum imóvel encontrado
+              </div>
+            ) : (
+              filteredProperties.map((prop) => (
+                <button
+                  key={prop.code}
+                  onClick={() => setSelectedPropertyCode(prop.code)}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-brand-50 border-b border-gray-100 last:border-0 transition-colors ${
+                    selectedPropertyCode === prop.code
+                      ? 'bg-brand-100 font-medium text-brand-900'
+                      : 'text-gray-700'
+                  }`}
+                >
+                  <div className="font-medium">{prop.code}</div>
+                  {prop.address && (
+                    <div className="text-xs text-gray-500 mt-0.5">{prop.address}</div>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Loading State */}
       {(loading || financialsLoading) && (
@@ -262,219 +450,18 @@ export const PropertyView: React.FC<PropertyViewProps> = ({
         </div>
       )}
 
-      {/* Empty State */}
-      {!loading && !selectedPropertyCode && (
+      {/* Empty State - Apenas no modo single */}
+      {!loading && !isMultiMode && propertiesToShow.length === 0 && (
         <div className="bg-white p-8 rounded-none border border-gray-200 shadow-sm text-center">
           <Home size={48} className="text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500">Selecione um imóvel para ver os detalhes financeiros</p>
         </div>
       )}
 
-      {/* No Data State */}
-      {!loading && selectedPropertyCode && propertyKPIs && propertyKPIs.reservationsCount === 0 && (
-        <div className="bg-white p-8 rounded-none border border-gray-200 shadow-sm text-center">
-          <Calendar size={48} className="text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">
-            Nenhuma reserva encontrada para <strong>{selectedPropertyCode}</strong> no período selecionado
-          </p>
-        </div>
-      )}
-
-      {/* KPIs do Imóvel */}
-      {!loading && selectedPropertyCode && propertyKPIs && propertyKPIs.reservationsCount > 0 && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Receita */}
-            <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <p className="text-sm text-gray-500 font-medium">Receita (Período)</p>
-                  <h3 className="text-2xl font-heading font-bold text-gray-900">
-                    {formatCurrency(propertyKPIs.revenue)}
-                  </h3>
-                </div>
-                <div className="bg-green-50 text-green-600 p-1.5 rounded-lg">
-                  <DollarSign size={20} />
-                </div>
-              </div>
-              <p className="text-xs text-gray-400">{propertyKPIs.reservationsCount} reservas</p>
-            </div>
-
-            {/* ADR */}
-            <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <p className="text-sm text-gray-500 font-medium">ADR (Diária Média)</p>
-                  <h3 className="text-2xl font-heading font-bold text-gray-900">
-                    {formatCurrency(propertyKPIs.adr)}
-                  </h3>
-                </div>
-                <div className="bg-purple-50 text-purple-600 p-1.5 rounded-lg">
-                  <BarChart3 size={20} />
-                </div>
-              </div>
-              <p className="text-xs text-gray-400">Average Daily Rate</p>
-            </div>
-
-            {/* Ocupação */}
-            <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <p className="text-sm text-gray-500 font-medium">Taxa de Ocupação</p>
-                  <h3 className="text-2xl font-heading font-bold text-gray-900">
-                    {propertyKPIs.occupancy.toFixed(1)}%
-                  </h3>
-                </div>
-                <div className="bg-teal-50 text-teal-600 p-1.5 rounded-lg">
-                  <Percent size={20} />
-                </div>
-              </div>
-              <p className="text-xs text-gray-400">
-                {propertyKPIs.totalNights} de {propertyKPIs.availableDays} dias
-              </p>
-            </div>
-
-            {/* RevPAR */}
-            <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <p className="text-sm text-gray-500 font-medium">RevPAR</p>
-                  <h3 className="text-2xl font-heading font-bold text-gray-900">
-                    {formatCurrency(propertyKPIs.revPAR)}
-                  </h3>
-                </div>
-                <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-lg">
-                  <DollarSign size={20} />
-                </div>
-              </div>
-              <p className="text-xs text-gray-400">Revenue Per Available Room</p>
-            </div>
-
-            {/* Total Reservas */}
-            <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <p className="text-sm text-gray-500 font-medium">Total Reservas</p>
-                  <h3 className="text-2xl font-heading font-bold text-gray-900">
-                    {propertyKPIs.reservationsCount}
-                  </h3>
-                </div>
-                <div className="bg-orange-50 text-orange-600 p-1.5 rounded-lg">
-                  <Home size={20} />
-                </div>
-              </div>
-              <p className="text-xs text-gray-400">No período selecionado</p>
-            </div>
-          </div>
-
-          {/* Gráfico de Receita */}
-          {propertyKPIs.monthlyData.length > 0 && (
-            <div className="bg-white p-6 rounded-none border border-gray-200 shadow-sm">
-              <h3 className="text-lg font-bold text-gray-800 mb-6">
-                Evolução de Receita - {selectedPropertyCode}
-              </h3>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={propertyKPIs.monthlyData}>
-                    <defs>
-                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value) => `R$${(value / 1000).toFixed(0)}k`}
-                    />
-                    <Tooltip
-                      formatter={(value: number) => formatCurrency(value)}
-                      contentStyle={{
-                        borderRadius: '8px',
-                        border: 'none',
-                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="receita"
-                      stroke="#10b981"
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#colorRevenue)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          {/* Tabela de Reservas do Imóvel */}
-          <div className="bg-white p-6 rounded-none border border-gray-200 shadow-sm">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">
-              Reservas - {selectedPropertyCode}
-            </h3>
-
-            {propertyReservations.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">
-                Nenhuma reserva encontrada para este imóvel no período.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Hóspede
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Check-in
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Check-out
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Noites
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Canal
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                        Valor Total
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {propertyReservations.map((res) => {
-                      const checkIn = new Date(res.startDate);
-                      const checkOut = new Date(res.endDate);
-
-                      return (
-                        <tr key={res.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-gray-900">{res.guestName}</td>
-                          <td className="px-4 py-3 text-gray-700">
-                            {checkIn.toLocaleDateString('pt-BR')}
-                          </td>
-                          <td className="px-4 py-3 text-gray-700">
-                            {checkOut.toLocaleDateString('pt-BR')}
-                          </td>
-                          <td className="px-4 py-3 text-gray-700">{res.nights}</td>
-                          <td className="px-4 py-3 text-gray-700">{res.platform || 'Direto'}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-green-700">
-                            {formatCurrency(res.priceValue || 0)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </>
-      )}
+      {/* Renderizar dados dos imóveis (single ou multi) */}
+      {!loading && !financialsLoading && propertiesToShow.map((propertyCode) => (
+        renderPropertyData(propertyCode)
+      ))}
     </div>
   );
 };
