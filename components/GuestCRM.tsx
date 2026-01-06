@@ -9,7 +9,7 @@ import {
  LogIn, LogOut, Home, X
 } from 'lucide-react';
 import { formatCurrency } from '../utils';
-import { getDetailedFinancials } from '../services/staysApiService';
+import { getDetailedFinancials, getCalendar } from '../services/staysApiService';
 
 interface GuestCRMProps {
  reservations: Reservation[];
@@ -33,6 +33,38 @@ interface ConsolidatedGuest {
  status: 'active' | 'churned' | 'new';
 }
 
+/**
+ * Formata telefone para padrão brasileiro (DD) 9XXXX-XXXX ou (DD) XXXX-XXXX
+ * Se não conseguir formatar, retorna o valor original
+ */
+const formatPhoneBR = (phone: string): string => {
+  if (!phone) return '—';
+
+  // Remove tudo que não é número
+  const cleaned = phone.replace(/\D/g, '');
+
+  // Se não tem números, retorna original
+  if (!cleaned) return phone;
+
+  // Formato brasileiro com DDD
+  // Celular: (XX) 9XXXX-XXXX (11 dígitos)
+  // Fixo: (XX) XXXX-XXXX (10 dígitos)
+  if (cleaned.length === 11) {
+    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
+  } else if (cleaned.length === 10) {
+    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
+  } else if (cleaned.length === 9) {
+    // Sem DDD, celular
+    return `${cleaned.slice(0, 5)}-${cleaned.slice(5)}`;
+  } else if (cleaned.length === 8) {
+    // Sem DDD, fixo
+    return `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+  }
+
+  // Se não se encaixa em nenhum padrão, retorna original
+  return phone;
+};
+
 const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks }) => {
  const [searchTerm, setSearchTerm] = useState('');
  const [selectedGuestName, setSelectedGuestName] = useState<string | null>(null);
@@ -50,6 +82,20 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks })
   staleTime: 10 * 60 * 1000, // 10 minutes
  });
 
+ // Fetch calendar data to get guest email and phone
+ const { data: calendarData } = useQuery({
+  queryKey: ['stays-calendar-guest-contact'],
+  queryFn: async () => {
+    // Buscar últimos 2 anos de reservas para ter histórico completo
+    const today = new Date();
+    const twoYearsAgo = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate());
+    const from = twoYearsAgo.toISOString().split('T')[0];
+    const to = today.toISOString().split('T')[0];
+    return getCalendar(from, to);
+  },
+  staleTime: 10 * 60 * 1000, // 10 minutes
+ });
+
  // Create map of bookingId -> reserveTotal for quick lookup
  const financialMap = useMemo(() => {
   const map: Record<string, number> = {};
@@ -60,6 +106,26 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks })
   }
   return map;
  }, [financialData]);
+
+ // Create map of guestName -> {email, phone} for contact info
+ const guestContactMap = useMemo(() => {
+  const map: Record<string, { email?: string; phone?: string }> = {};
+  if (calendarData?.units) {
+    calendarData.units.forEach(unit => {
+      unit.reservations.forEach(res => {
+        const name = res.guestName.trim();
+        // Só adiciona se ainda não existe ou se tem mais informação
+        if (!map[name] || (res.guestEmail && !map[name].email) || (res.guestPhone && !map[name].phone)) {
+          map[name] = {
+            email: res.guestEmail || map[name]?.email,
+            phone: res.guestPhone || map[name]?.phone,
+          };
+        }
+      });
+    });
+  }
+  return map;
+ }, [calendarData]);
 
  // --- DATA PROCESSING CORE ---
  const guests = useMemo(() => {
@@ -73,8 +139,13 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks })
    if (!name || name === 'Hóspede (Stays)' || name === 'Bloqueio') return;
 
    if (!guestMap[name]) {
+    // Buscar email/phone do mapa de contatos da API
+    const contactInfo = guestContactMap[name] || {};
+
     guestMap[name] = {
      name,
+     email: contactInfo.email,
+     phone: contactInfo.phone,
      firstSeen: Infinity,
      lastSeen: 0,
      totalStays: 0,
@@ -173,7 +244,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks })
   });
 
   return result;
- }, [reservations, tickets, feedbacks, financialMap]);
+ }, [reservations, tickets, feedbacks, financialMap, guestContactMap]);
 
  const filteredGuests = useMemo(() => {
   // 1. Search Filter
@@ -400,7 +471,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks })
          <button onClick={() => setSelectedGuestName(null)} className="flex items-center mb-4 text-gray-500 md:hidden">
            <ChevronRight size={20} className="rotate-180" /> Voltar
          </button>
-         
+
          <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
            <div className="flex items-center gap-4">
              <div className="flex items-center justify-center w-16 h-16 text-2xl font-heading font-bold text-white rounded-full shadow-lg from-blue-500 to-indigo-600">
@@ -414,6 +485,21 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks })
                <p className="flex items-center gap-2 mt-1 text-sm text-gray-500">
                  <Clock size={14} /> Última vez: {getRecencyLabel(activeGuest.lastSeen)}
                </p>
+               {/* Informações de Contato */}
+               <div className="flex flex-col gap-1 mt-2">
+                 {activeGuest.email && (
+                   <p className="flex items-center gap-2 text-xs text-gray-600">
+                     <Mail size={12} className="text-gray-400" />
+                     <span>{activeGuest.email}</span>
+                   </p>
+                 )}
+                 {activeGuest.phone && (
+                   <p className="flex items-center gap-2 text-xs text-gray-600">
+                     <Phone size={12} className="text-gray-400" />
+                     <span>{formatPhoneBR(activeGuest.phone)}</span>
+                   </p>
+                 )}
+               </div>
              </div>
            </div>
            <div className="flex gap-2">

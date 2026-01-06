@@ -121,6 +121,8 @@ export interface CalendarReservation {
   id: string;
   bookingId: string;
   guestName: string;
+  guestEmail: string | null;
+  guestPhone: string | null;
   type: 'reserved' | 'blocked' | 'provisional';
   startDate: string;
   endDate: string;

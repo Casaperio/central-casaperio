@@ -392,6 +392,10 @@ function AppContent() {
     activateTablet(propertyCode);
   };
 
+  const handleOpenFieldApp = (): void => {
+    setActiveModule('field_app');
+  };
+
   // Handlers para filtro de período (Manutenção)
   const handlePeriodPresetChange = (preset: PeriodPreset): void => {
     setPeriodPreset(preset);
@@ -738,6 +742,7 @@ function AppContent() {
              deleteInventoryItem={deleteInventoryItem}
              createInventoryTransaction={createInventoryTransaction}
              handleActivateTablet={handleActivateTablet}
+             handleOpenFieldApp={handleOpenFieldApp}
            />
 
         </main>

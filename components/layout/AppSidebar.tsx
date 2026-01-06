@@ -103,9 +103,6 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
      <button onClick={() => handleViewClick('messages')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'messages' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
       <Inbox size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Mensagens</span>}
      </button>
-     <button onClick={() => handleModuleClick('field_app', 'cards')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-gray-600 hover:bg-gray-50`}>
-      <Smartphone size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>App de Campo</span>}
-     </button>
      <button onClick={() => handleViewClick('boards')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'boards' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
       <Kanban size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Painéis & Fluxos</span>}
      </button>

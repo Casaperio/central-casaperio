@@ -81,6 +81,7 @@ interface ModuleRouterProps {
     notes?: string;
   }) => Promise<void>;
   handleActivateTablet: (propertyCode: string) => void;
+  handleOpenFieldApp: () => void;
 }
 
 export function ModuleRouter({
@@ -115,6 +116,7 @@ export function ModuleRouter({
   deleteInventoryItem,
   createInventoryTransaction,
   handleActivateTablet,
+  handleOpenFieldApp,
 }: ModuleRouterProps) {
 
   if (viewMode === 'stats') {
@@ -182,6 +184,7 @@ export function ModuleRouter({
         onDeleteSupplier={(id) => storageService.suppliers.delete(id)}
         onUpdateSupplier={(supplier) => storageService.suppliers.update(supplier)}
         onActivateTablet={handleActivateTablet}
+        onOpenFieldApp={handleOpenFieldApp}
       />
     );
   }
