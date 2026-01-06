@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Reservation, ReservationStatus } from '../types';
+import { Reservation, ReservationStatus, Property } from '../types';
 import {
  DollarSign, TrendingUp, TrendingDown,
  CalendarRange, BarChart3, ArrowUpRight,
@@ -11,10 +11,13 @@ import {
  PieChart as RePieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
 import { useFinancialData } from '../hooks/useFinancialData';
+import { usePeriodFilter } from '../hooks/usePeriodFilter';
+import { PeriodFilter } from './PeriodFilter';
 import FinancialDetailsTable from './FinancialDetailsTable';
 
 interface FinancialPanelProps {
  reservations: Reservation[];
+ properties: Property[];
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -28,12 +31,18 @@ const shortenName = (name: string | null | undefined) => {
   return name;
 };
 
-const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations }) => {
+const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations, properties }) => {
  const [sameStoreFilter, setSameStoreFilter] = useState(false);
  const [revenueDistPeriod, setRevenueDistPeriod] = useState<'current' | 'lastMonth' | 'sameLastYear' | 'ytd'>('current');
  const [showAllProfitable, setShowAllProfitable] = useState(false);
+ const [selectedProperties, setSelectedProperties] = useState<string[]>([]);
+ const [propertySearchQuery, setPropertySearchQuery] = useState('');
+ const [isPropertyDropdownOpen, setIsPropertyDropdownOpen] = useState(false);
 
- // --- STAYS API DATA ---
+ // Period Filter Hook
+ const { preset, from, to, setPreset, setCustomPeriod } = usePeriodFilter();
+
+ // --- STAYS API DATA with period params ---
  const {
   summary: apiSummary,
   byProperty: apiByProperty,
@@ -45,7 +54,7 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations }) => {
   error: apiError,
   refetch: refetchApi,
   refreshPanel
- } = useFinancialData();
+ } = useFinancialData({ from, to });
 
  // --- LOCAL DATA PROCESSING (for charts that need reservation details) ---
  const processFinancials = useMemo(() => {
@@ -143,14 +152,95 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations }) => {
 
  const { chartData, pieData, topProps } = processFinancials;
 
+ // Filtrar dados da API baseado nos imóveis selecionados
+ const filteredApiData = useMemo(() => {
+   // Se não houver imóveis selecionados, retorna dados originais
+   if (selectedProperties.length === 0) {
+     return {
+       byProperty: apiByProperty,
+       summary: apiSummary,
+     };
+   }
+
+   // Filtrar dados por imóveis selecionados
+   const filteredByProperty = apiByProperty.filter(p =>
+     selectedProperties.includes(p.propertyCode)
+   );
+
+   // Recalcular summary baseado nos imóveis filtrados
+   if (filteredByProperty.length === 0 || !apiSummary) {
+     return {
+       byProperty: filteredByProperty,
+       summary: apiSummary,
+     };
+   }
+
+   // Somar métricas dos imóveis filtrados
+   const totalRevenue = filteredByProperty.reduce((sum, p) => sum + p.revenue, 0);
+   const totalNights = filteredByProperty.reduce((sum, p) => sum + p.nights, 0);
+   const totalBookings = filteredByProperty.reduce((sum, p) => sum + p.bookingsCount, 0);
+
+   // Calcular ADR médio ponderado
+   const averageDailyRate = totalNights > 0 ? totalRevenue / totalNights : 0;
+
+   // Para ocupação, precisamos somar as noites totais disponíveis
+   // Como não temos esse dado agregado, vamos manter a ocupação do summary original
+   // ou calcular uma média ponderada
+   const totalOccupiedNights = filteredByProperty.reduce((sum, p) => sum + p.nights, 0);
+   const weightedOccupancy = filteredByProperty.reduce((sum, p) =>
+     sum + (p.occupancyRate * p.nights), 0) / (totalNights || 1);
+
+   const recalculatedSummary = {
+     ...apiSummary,
+     averageDailyRate,
+     occupancyRate: weightedOccupancy,
+     totalNights: totalOccupiedNights,
+     reservationsCount: totalBookings,
+     revPAR: averageDailyRate * (weightedOccupancy / 100),
+   };
+
+   return {
+     byProperty: filteredByProperty,
+     summary: recalculatedSummary,
+   };
+ }, [apiByProperty, apiSummary, selectedProperties]);
+
+ // Filtrar propriedades baseado na busca
+ const filteredPropertiesForSelection = useMemo(() => {
+   if (!propertySearchQuery) return properties;
+
+   const query = propertySearchQuery.toLowerCase();
+   return properties.filter(
+     (p) =>
+       p.code.toLowerCase().includes(query) ||
+       p.address?.toLowerCase().includes(query)
+   );
+ }, [properties, propertySearchQuery]);
+
+ // Funções para manipular seleção de imóveis
+ const togglePropertySelection = (propertyCode: string) => {
+   setSelectedProperties(prev => {
+     if (prev.includes(propertyCode)) {
+       return prev.filter(code => code !== propertyCode);
+     } else {
+       return [...prev, propertyCode];
+     }
+   });
+ };
+
+ const clearPropertySelection = () => {
+   setSelectedProperties([]);
+   setPropertySearchQuery('');
+ };
+
  // Use API trend data if available, otherwise use local chart data
  const trendChartData = apiTrend.length > 0
   ? apiTrend.map(t => ({ name: t.month, receita: t.revenue }))
   : chartData;
 
- // Use API by-property data if available
- const topPropsData = apiByProperty.length > 0
-  ? apiByProperty.map(p => ({
+ // Use filtered API by-property data if available
+ const topPropsData = filteredApiData.byProperty.length > 0
+  ? filteredApiData.byProperty.map(p => ({
     name: shortenName(p.propertyCode),
     fullName: p.propertyCode,
     value: p.revenue
@@ -212,6 +302,106 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations }) => {
      </div>
    </div>
 
+   {/* Period Filter */}
+   <PeriodFilter
+     preset={preset}
+     from={from}
+     to={to}
+     onPresetChange={setPreset}
+     onCustomPeriodChange={setCustomPeriod}
+   />
+
+   {/* Seleção de Imóveis (Multi-select) */}
+   <div className="bg-white p-4 rounded-none border border-gray-200 shadow-sm">
+     <div className="flex items-center justify-between mb-3">
+       <div className="flex items-center gap-2">
+         <Home size={16} className="text-gray-600" />
+         <h4 className="text-sm font-semibold text-gray-700">
+           Filtrar por Imóvel{selectedProperties.length > 0 && ` (${selectedProperties.length} selecionado${selectedProperties.length > 1 ? 's' : ''})`}
+         </h4>
+       </div>
+       {selectedProperties.length > 0 && (
+         <button
+           onClick={clearPropertySelection}
+           className="text-xs text-red-600 hover:text-red-800 font-medium"
+         >
+           Limpar seleção
+         </button>
+       )}
+     </div>
+
+     <div className="relative">
+       <input
+         type="text"
+         placeholder="Buscar imóveis por código ou endereço..."
+         value={propertySearchQuery}
+         onChange={(e) => setPropertySearchQuery(e.target.value)}
+         onFocus={() => setIsPropertyDropdownOpen(true)}
+         className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-brand-500"
+       />
+
+       {isPropertyDropdownOpen && (
+         <>
+           {/* Overlay para fechar dropdown */}
+           <div
+             className="fixed inset-0 z-10"
+             onClick={() => setIsPropertyDropdownOpen(false)}
+           />
+
+           {/* Dropdown de imóveis */}
+           <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-64 overflow-y-auto">
+             {filteredPropertiesForSelection.length === 0 ? (
+               <div className="p-4 text-sm text-gray-500 text-center">
+                 Nenhum imóvel encontrado
+               </div>
+             ) : (
+               filteredPropertiesForSelection.map((prop) => (
+                 <label
+                   key={prop.code}
+                   className="flex items-center gap-2 px-3 py-2 hover:bg-brand-50 cursor-pointer border-b border-gray-100 last:border-0"
+                 >
+                   <input
+                     type="checkbox"
+                     checked={selectedProperties.includes(prop.code)}
+                     onChange={() => togglePropertySelection(prop.code)}
+                     className="rounded text-brand-600 focus:ring-brand-500"
+                   />
+                   <div className="flex-1">
+                     <div className="text-sm font-medium text-gray-900">{prop.code}</div>
+                     {prop.address && (
+                       <div className="text-xs text-gray-500">{prop.address}</div>
+                     )}
+                   </div>
+                 </label>
+               ))
+             )}
+           </div>
+         </>
+       )}
+     </div>
+   </div>
+
+   {/* Banner informativo quando há filtro ativo */}
+   {selectedProperties.length > 0 && (
+     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+       <div className="flex items-center gap-2">
+         <Home size={16} className="text-blue-600" />
+         <span className="text-sm text-blue-800 font-medium">
+           Filtrando por {selectedProperties.length} imóvel{selectedProperties.length > 1 ? 'is' : ''}
+         </span>
+         <span className="text-xs text-blue-600">
+           ({selectedProperties.join(', ')})
+         </span>
+       </div>
+       <button
+         onClick={clearPropertySelection}
+         className="text-xs text-blue-600 hover:text-blue-800 font-medium underline"
+       >
+         Limpar filtro
+       </button>
+     </div>
+   )}
+
    {/* Error Display */}
    {apiError && (
     <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
@@ -219,256 +409,259 @@ const FinancialPanel: React.FC<FinancialPanelProps> = ({ reservations }) => {
     </div>
    )}
 
-   {/* KPI Cards - Now using API data */}
-   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-    {/* Monthly Revenue */}
-    <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm relative">
-     {isLoading && <div className="absolute top-2 right-2"><Loader2 size={14} className="animate-spin text-gray-400" /></div>}
-     <div className="flex justify-between items-start mb-2">
-      <div>
-       <p className="text-sm text-gray-500 font-medium">Receita (Mês Atual)</p>
-       <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(currentMonthRevenue)}</h3>
-      </div>
-      <div className={`p-1.5 rounded-lg ${monthGrowth >= 0 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
-       {monthGrowth >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
-      </div>
-     </div>
-     <div className="flex items-center gap-1 text-xs">
-      <span className={`font-bold ${monthGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-       {monthGrowth >= 0 ? '+' : ''}{monthGrowth.toFixed(1)}%
-      </span>
-      <span className="text-gray-400">vs mês anterior ({formatCurrency(previousMonthRevenue)})</span>
-     </div>
-    </div>
-
-    {/* Yearly Revenue */}
-    <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm relative">
-     {isLoading && <div className="absolute top-2 right-2"><Loader2 size={14} className="animate-spin text-gray-400" /></div>}
-     <div className="flex justify-between items-start mb-2">
-      <div>
-       <p className="text-sm text-gray-500 font-medium">Receita Acumulada (YTD)</p>
-       <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(ytdRevenue)}</h3>
-      </div>
-      <div className="bg-blue-50 text-blue-600 p-1.5 rounded-lg">
-       <CalendarRange size={20} />
-      </div>
-     </div>
-     <div className="flex items-center gap-1 text-xs">
-       <span className={`font-bold ${ytdGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-       {ytdGrowth >= 0 ? '+' : ''}{ytdGrowth.toFixed(1)}%
-      </span>
-      <span className="text-gray-400">vs acumulado ano ant.</span>
-     </div>
-    </div>
-
-    {/* ADR */}
-    <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm relative">
-     {isLoading && <div className="absolute top-2 right-2"><Loader2 size={14} className="animate-spin text-gray-400" /></div>}
-     <div className="flex justify-between items-start mb-2">
-      <div>
-       <p className="text-sm text-gray-500 font-medium">Ticket Médio (ADR)</p>
-       <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(averageTicket)}</h3>
-      </div>
-      <div className="bg-amber-50 text-amber-600 p-1.5 rounded-lg">
-       <BarChart3 size={20} />
-      </div>
-     </div>
-     <p className="text-xs text-gray-400">Média por reserva neste mês</p>
-    </div>
-
-    {/* Projection */}
-    <div className="bg-gradient-to-br from-green-50 to-white p-5 rounded-none border border-green-100 shadow-sm relative">
-     {isLoading && <div className="absolute top-2 right-2"><Loader2 size={14} className="animate-spin text-gray-400" /></div>}
-     <div className="flex justify-between items-start mb-2">
-      <div>
-       <p className="text-sm text-green-800 font-medium">Projeção Próx. Mês</p>
-       <h3 className="text-2xl font-heading font-bold text-green-900">{formatCurrency(nextMonthProjection)}</h3>
-      </div>
-      <div className="bg-white text-green-600 p-1.5 rounded-lg shadow-sm">
-       <ArrowUpRight size={20} />
-      </div>
-     </div>
-     <p className="text-xs text-green-700">Baseado no histórico de crescimento</p>
-    </div>
-   </div>
-
-   {/* API Metrics Section */}
-   {apiSummary && (
-    <div className="space-y-4">
-     <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-       <h3 className="text-lg font-bold text-gray-800">Métricas Stays.net (Últimos 30 dias)</h3>
-       {apiLoading && <Loader2 size={16} className="animate-spin text-gray-400" />}
-      </div>
-      <button
-       onClick={() => refetchApi()}
-       disabled={apiLoading}
-       className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-      >
-       <RefreshCw size={14} className={apiLoading ? 'animate-spin' : ''} />
-       Atualizar
-      </button>
-     </div>
-
-     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      {/* ADR - Average Daily Rate */}
-      <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
-       <div className="flex justify-between items-start mb-2">
-        <div>
-         <p className="text-sm text-gray-500 font-medium">ADR (Diária Média)</p>
-         <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(apiSummary.averageDailyRate)}</h3>
+   {/* Visão Geral - Sempre visível */}
+   <>
+       {/* KPI Cards - Now using API data */}
+       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Monthly Revenue */}
+        <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm relative">
+         {isLoading && <div className="absolute top-2 right-2"><Loader2 size={14} className="animate-spin text-gray-400" /></div>}
+         <div className="flex justify-between items-start mb-2">
+          <div>
+           <p className="text-sm text-gray-500 font-medium">Receita (Mês Atual)</p>
+           <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(currentMonthRevenue)}</h3>
+          </div>
+          <div className={`p-1.5 rounded-lg ${monthGrowth >= 0 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+           {monthGrowth >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
+          </div>
+         </div>
+         <div className="flex items-center gap-1 text-xs">
+          <span className={`font-bold ${monthGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+           {monthGrowth >= 0 ? '+' : ''}{monthGrowth.toFixed(1)}%
+          </span>
+          <span className="text-gray-400">vs mês anterior ({formatCurrency(previousMonthRevenue)})</span>
+         </div>
         </div>
-        <div className="bg-purple-50 text-purple-600 p-1.5 rounded-lg">
-         <BarChart3 size={20} />
+
+        {/* Yearly Revenue */}
+        <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm relative">
+         {isLoading && <div className="absolute top-2 right-2"><Loader2 size={14} className="animate-spin text-gray-400" /></div>}
+         <div className="flex justify-between items-start mb-2">
+          <div>
+           <p className="text-sm text-gray-500 font-medium">Receita Acumulada (YTD)</p>
+           <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(ytdRevenue)}</h3>
+          </div>
+          <div className="bg-blue-50 text-blue-600 p-1.5 rounded-lg">
+           <CalendarRange size={20} />
+          </div>
+         </div>
+         <div className="flex items-center gap-1 text-xs">
+           <span className={`font-bold ${ytdGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+           {ytdGrowth >= 0 ? '+' : ''}{ytdGrowth.toFixed(1)}%
+          </span>
+          <span className="text-gray-400">vs acumulado ano ant.</span>
+         </div>
+        </div>
+
+        {/* ADR */}
+        <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm relative">
+         {isLoading && <div className="absolute top-2 right-2"><Loader2 size={14} className="animate-spin text-gray-400" /></div>}
+         <div className="flex justify-between items-start mb-2">
+          <div>
+           <p className="text-sm text-gray-500 font-medium">Ticket Médio (ADR)</p>
+           <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(averageTicket)}</h3>
+          </div>
+          <div className="bg-amber-50 text-amber-600 p-1.5 rounded-lg">
+           <BarChart3 size={20} />
+          </div>
+         </div>
+         <p className="text-xs text-gray-400">Média por reserva neste mês</p>
+        </div>
+
+        {/* Projection */}
+        <div className="bg-gradient-to-br from-green-50 to-white p-5 rounded-none border border-green-100 shadow-sm relative">
+         {isLoading && <div className="absolute top-2 right-2"><Loader2 size={14} className="animate-spin text-gray-400" /></div>}
+         <div className="flex justify-between items-start mb-2">
+          <div>
+           <p className="text-sm text-green-800 font-medium">Projeção Próx. Mês</p>
+           <h3 className="text-2xl font-heading font-bold text-green-900">{formatCurrency(nextMonthProjection)}</h3>
+          </div>
+          <div className="bg-white text-green-600 p-1.5 rounded-lg shadow-sm">
+           <ArrowUpRight size={20} />
+          </div>
+         </div>
+         <p className="text-xs text-green-700">Baseado no histórico de crescimento</p>
         </div>
        </div>
-       <p className="text-xs text-gray-400">Average Daily Rate por noite</p>
-      </div>
 
-      {/* RevPAR */}
-      <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
-       <div className="flex justify-between items-start mb-2">
-        <div>
-         <p className="text-sm text-gray-500 font-medium">RevPAR</p>
-         <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(apiSummary.revPAR)}</h3>
+       {/* API Metrics Section */}
+       {filteredApiData.summary && (
+        <div className="space-y-4">
+         <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+           <h3 className="text-lg font-bold text-gray-800">Métricas Stays.net (Período Selecionado)</h3>
+           {apiLoading && <Loader2 size={16} className="animate-spin text-gray-400" />}
+          </div>
+          <button
+           onClick={() => refetchApi()}
+           disabled={apiLoading}
+           className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+          >
+           <RefreshCw size={14} className={apiLoading ? 'animate-spin' : ''} />
+           Atualizar
+          </button>
+         </div>
+
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* ADR - Average Daily Rate */}
+          <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
+           <div className="flex justify-between items-start mb-2">
+            <div>
+             <p className="text-sm text-gray-500 font-medium">ADR (Diária Média)</p>
+             <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(filteredApiData.summary.averageDailyRate)}</h3>
+            </div>
+            <div className="bg-purple-50 text-purple-600 p-1.5 rounded-lg">
+             <BarChart3 size={20} />
+            </div>
+           </div>
+           <p className="text-xs text-gray-400">Average Daily Rate por noite</p>
+          </div>
+
+          {/* RevPAR */}
+          <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
+           <div className="flex justify-between items-start mb-2">
+            <div>
+             <p className="text-sm text-gray-500 font-medium">RevPAR</p>
+             <h3 className="text-2xl font-heading font-bold text-gray-900">{formatCurrency(filteredApiData.summary.revPAR)}</h3>
+            </div>
+            <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-lg">
+             <DollarSign size={20} />
+            </div>
+           </div>
+           <p className="text-xs text-gray-400">Revenue Per Available Room</p>
+          </div>
+
+          {/* Occupancy Rate */}
+          <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
+           <div className="flex justify-between items-start mb-2">
+            <div>
+             <p className="text-sm text-gray-500 font-medium">Taxa de Ocupação</p>
+             <h3 className="text-2xl font-heading font-bold text-gray-900">{filteredApiData.summary.occupancyRate.toFixed(1)}%</h3>
+            </div>
+            <div className="bg-teal-50 text-teal-600 p-1.5 rounded-lg">
+             <Percent size={20} />
+            </div>
+           </div>
+           <p className="text-xs text-gray-400">{filteredApiData.summary.totalNights} noites ocupadas de {filteredApiData.summary.availableNights}</p>
+          </div>
+
+          {/* Total Reservations */}
+          <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
+           <div className="flex justify-between items-start mb-2">
+            <div>
+             <p className="text-sm text-gray-500 font-medium">Total Reservas</p>
+             <h3 className="text-2xl font-heading font-bold text-gray-900">{filteredApiData.summary.reservationsCount}</h3>
+            </div>
+            <div className="bg-orange-50 text-orange-600 p-1.5 rounded-lg">
+             <Home size={20} />
+            </div>
+           </div>
+           <p className="text-xs text-gray-400">No período selecionado</p>
+          </div>
+         </div>
         </div>
-        <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-lg">
-         <DollarSign size={20} />
+       )}
+
+       {/* Charts Section */}
+       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Main Area Chart */}
+        <div className="bg-white p-6 rounded-none border border-gray-200 shadow-sm">
+         <h3 className="text-lg font-bold text-gray-800 mb-6">Evolução de Receita (12 Meses)</h3>
+         <div className="h-80 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+           <AreaChart data={trendChartData}>
+            <defs>
+             <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+              <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+             </linearGradient>
+            </defs>
+            <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+            <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `R$${value/1000}k`} />
+            <Tooltip
+             formatter={(value: number) => formatCurrency(value)}
+             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+            />
+            <Area type="monotone" dataKey="receita" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorReceita)" />
+           </AreaChart>
+          </ResponsiveContainer>
+         </div>
+        </div>
+
+        {/* Profitable Properties (Vertical Bar) */}
+        <div className="bg-white p-6 rounded-none border border-gray-200 shadow-sm h-96 flex flex-col">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-bold text-gray-800">Top Imóveis (YTD)</h3>
+            <button
+              onClick={() => setShowAllProfitable(!showAllProfitable)}
+              className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+            >
+              {showAllProfitable ? 'Ver Top 5' : 'Ver Todos'}
+            </button>
+          </div>
+
+          {showAllProfitable ? (
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-gray-100">
+                  {topPropsData.map((p, idx) => (
+                    <tr key={p.fullName} className="hover:bg-gray-50">
+                      <td className="py-2 text-xs font-medium text-gray-500 w-6">{idx+1}.</td>
+                      <td className="py-2 font-medium text-gray-800">{p.fullName}</td>
+                      <td className="py-2 text-right font-bold text-green-700">{formatCurrency(p.value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topPropsData.slice(0, 5)} layout="vertical" margin={{ left: 10, right: 10 }}>
+                <XAxis type="number" hide />
+                <YAxis dataKey="name" type="category" width={60} fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip formatter={(val: number) => formatCurrency(val)} cursor={{fill: 'transparent'}} />
+                <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Channel Pie Chart */}
+        <div className="bg-white p-6 rounded-none border border-gray-200 shadow-sm">
+         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+           <h3 className="text-lg font-bold text-gray-800">Distribuição de Receita por Canal</h3>
+         </div>
+
+         <div className="h-64 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+           <RePieChart>
+            <Pie
+             data={channelPieData}
+             cx="50%"
+             cy="50%"
+             innerRadius={60}
+             outerRadius={80}
+             paddingAngle={5}
+             dataKey="value"
+            >
+             {channelPieData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+             ))}
+            </Pie>
+            <Tooltip formatter={(value: number) => formatCurrency(value)} />
+            <Legend verticalAlign="bottom" height={36}/>
+           </RePieChart>
+          </ResponsiveContainer>
+         </div>
         </div>
        </div>
-       <p className="text-xs text-gray-400">Revenue Per Available Room</p>
-      </div>
 
-      {/* Occupancy Rate */}
-      <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
-       <div className="flex justify-between items-start mb-2">
-        <div>
-         <p className="text-sm text-gray-500 font-medium">Taxa de Ocupação</p>
-         <h3 className="text-2xl font-heading font-bold text-gray-900">{apiSummary.occupancyRate.toFixed(1)}%</h3>
-        </div>
-        <div className="bg-teal-50 text-teal-600 p-1.5 rounded-lg">
-         <Percent size={20} />
-        </div>
+       {/* Detailed Financial Table */}
+       <div className="mt-8">
+        <FinancialDetailsTable from={from} to={to} selectedPropertyCodes={selectedProperties} />
        </div>
-       <p className="text-xs text-gray-400">{apiSummary.totalNights} noites ocupadas de {apiSummary.availableNights}</p>
-      </div>
-
-      {/* Total Reservations */}
-      <div className="bg-white p-5 rounded-none border border-gray-200 shadow-sm">
-       <div className="flex justify-between items-start mb-2">
-        <div>
-         <p className="text-sm text-gray-500 font-medium">Total Reservas</p>
-         <h3 className="text-2xl font-heading font-bold text-gray-900">{apiSummary.reservationsCount}</h3>
-        </div>
-        <div className="bg-orange-50 text-orange-600 p-1.5 rounded-lg">
-         <Home size={20} />
-        </div>
-       </div>
-       <p className="text-xs text-gray-400">No período selecionado</p>
-      </div>
-     </div>
-    </div>
-   )}
-
-   {/* Charts Section */}
-   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-    {/* Main Area Chart */}
-    <div className="bg-white p-6 rounded-none border border-gray-200 shadow-sm">
-     <h3 className="text-lg font-bold text-gray-800 mb-6">Evolução de Receita (12 Meses)</h3>
-     <div className="h-80 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-       <AreaChart data={trendChartData}>
-        <defs>
-         <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-         </linearGradient>
-        </defs>
-        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-        <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `R$${value/1000}k`} />
-        <Tooltip
-         formatter={(value: number) => formatCurrency(value)}
-         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-        />
-        <Area type="monotone" dataKey="receita" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorReceita)" />
-       </AreaChart>
-      </ResponsiveContainer>
-     </div>
-    </div>
-
-    {/* Profitable Properties (Vertical Bar) */}
-    <div className="bg-white p-6 rounded-none border border-gray-200 shadow-sm h-96 flex flex-col">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-bold text-gray-800">Top Imóveis (YTD)</h3>
-        <button
-          onClick={() => setShowAllProfitable(!showAllProfitable)}
-          className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-        >
-          {showAllProfitable ? 'Ver Top 5' : 'Ver Todos'}
-        </button>
-      </div>
-
-      {showAllProfitable ? (
-        <div className="flex-1 overflow-y-auto">
-          <table className="w-full text-sm">
-            <tbody className="divide-y divide-gray-100">
-              {topPropsData.map((p, idx) => (
-                <tr key={p.fullName} className="hover:bg-gray-50">
-                  <td className="py-2 text-xs font-medium text-gray-500 w-6">{idx+1}.</td>
-                  <td className="py-2 font-medium text-gray-800">{p.fullName}</td>
-                  <td className="py-2 text-right font-bold text-green-700">{formatCurrency(p.value)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={topPropsData.slice(0, 5)} layout="vertical" margin={{ left: 10, right: 10 }}>
-            <XAxis type="number" hide />
-            <YAxis dataKey="name" type="category" width={60} fontSize={11} tickLine={false} axisLine={false} />
-            <Tooltip formatter={(val: number) => formatCurrency(val)} cursor={{fill: 'transparent'}} />
-            <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
-          </BarChart>
-        </ResponsiveContainer>
-      )}
-    </div>
-
-    {/* Channel Pie Chart */}
-    <div className="bg-white p-6 rounded-none border border-gray-200 shadow-sm">
-     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-       <h3 className="text-lg font-bold text-gray-800">Distribuição de Receita por Canal</h3>
-     </div>
-
-     <div className="h-64 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-       <RePieChart>
-        <Pie
-         data={channelPieData}
-         cx="50%"
-         cy="50%"
-         innerRadius={60}
-         outerRadius={80}
-         paddingAngle={5}
-         dataKey="value"
-        >
-         {channelPieData.map((entry, index) => (
-          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-         ))}
-        </Pie>
-        <Tooltip formatter={(value: number) => formatCurrency(value)} />
-        <Legend verticalAlign="bottom" height={36}/>
-       </RePieChart>
-      </ResponsiveContainer>
-     </div>
-    </div>
-   </div>
-
-   {/* Detailed Financial Table */}
-   <div className="mt-8">
-    <FinancialDetailsTable />
-   </div>
+     </>
 
   </div>
  );

@@ -74,6 +74,37 @@ export interface GuestFeedback {
   createdAt: number;
 }
 
+export interface GuestNote {
+  id: string;
+  guestKey: string; // Nome normalizado usado como chave
+  guestName: string; // Nome original do hóspede
+  note: string; // Observações/comentários sobre o hóspede
+  updatedAt: number;
+  updatedBy: string; // Nome do usuário que atualizou
+}
+
+export interface ReservationOverrides {
+  id: string; // reservationId ou externalId
+  reservationId?: string; // ID da reserva (preferencial)
+  externalId?: string; // ID externo (fallback)
+  propertyCode: string;
+  guestName: string;
+  language?: string;
+  docsSent?: boolean;
+  docsSentToBuilding?: boolean;
+  hasChildren?: boolean;
+  wantsBedSplit?: boolean;
+  earlyCheckIn?: { requested: boolean; time: string; granted: boolean };
+  lateCheckOut?: { requested: boolean; time: string; granted: boolean };
+  flightInfo?: string;
+  roomConfig?: string;
+  notes?: string;
+  specialAttention?: boolean;
+  problemReported?: boolean;
+  updatedAt: number;
+  updatedBy: string;
+}
+
 export interface Ticket {
   id: string;
   propertyCode: string;

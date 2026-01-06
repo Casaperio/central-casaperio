@@ -7,7 +7,6 @@ import {
   Board, BoardColumn, BoardCard, AfterHoursConfig, CallSession
 } from './types';
 import { storageService } from './services/storage';
-import { staysService } from './services/staysService';
 import { checkFlightStatus } from './services/geminiService';
 import { auth, initializeFirebase } from './services/firebase';
 import { checkoutAutomationService } from './services/checkoutAutomationService';
@@ -49,7 +48,8 @@ import { useDataSubscriptions } from './hooks/app/useDataSubscriptions';
 import { useNewReservationDetector } from './hooks/features/useNewReservationDetector';
 import { useTicketNotifications } from './hooks/features/useTicketNotifications';
 import { useWebRTCCall } from './hooks/features/useWebRTCCall';
-import { useMaintenanceFilters } from './hooks/features/useMaintenanceFilters';
+import { useMaintenanceFilters, PeriodPreset } from './hooks/features/useMaintenanceFilters';
+import { useMaintenancePagination } from './hooks/features/useMaintenancePagination';
 
 // Context Providers
 import { AppProviders } from './contexts/AppProviders';
@@ -144,6 +144,7 @@ function AppContent() {
     boardColumns,
     boardCards,
     incomingCalls,
+    maintenanceOverrides,
   } = useDataSubscriptions(isDbConnected, kioskProperty);
 
   // Celebration Confetti State
@@ -234,14 +235,6 @@ function AppContent() {
   // Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(true); // Desktop state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Mobile state
-  
-  // Global Sync State
-  const [isSystemRefreshing, setIsSystemRefreshing] = useState(false);
-  const [lastSystemRefresh, setLastSystemRefresh] = useState<Date | null>(null);
-
-  // Stays Manual Sync State
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
 
   // Stays API Data (from stays-api backend)
   const {
@@ -256,7 +249,7 @@ function AppContent() {
   } = useStaysData();
 
   // Combine loading states
-  const isGlobalLoading = staysLoading || staysRefetching || isSyncing || isSystemRefreshing;
+  const isGlobalLoading = staysLoading || staysRefetching;
 
   // Calendar UI State
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -274,6 +267,16 @@ function AppContent() {
   const [filterMaintenanceAssignee, setFilterMaintenanceAssignee] = useState<string>('all');
   const [filterMaintenanceProperty, setFilterMaintenanceProperty] = useState<string>('all');
   const [filterMaintenanceType, setFilterMaintenanceType] = useState<string>('all');
+
+  // Maintenance Period Filter (default: 'all' - sem filtro)
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('all');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+
+  // Guest Period Filter (default: 'all' - sem filtro)
+  const [guestPeriodPreset, setGuestPeriodPreset] = useState<PeriodPreset>('all');
+  const [guestCustomStartDate, setGuestCustomStartDate] = useState<string>('');
+  const [guestCustomEndDate, setGuestCustomEndDate] = useState<string>('');
 
   // Initialize Firebase on app mount
   useEffect(() => {
@@ -308,6 +311,7 @@ function AppContent() {
   // New Reservation Detector Hook
   useNewReservationDetector({
     staysReservations,
+    currentUser,
     onNewReservation: (newOnes) => {
       setNewReservations(newOnes);
       setShowConfetti(true);
@@ -389,65 +393,30 @@ function AppContent() {
     activateTablet(propertyCode);
   };
 
-  // ... (Global Refresh & Sync Logic - Unchanged) ...
-  const handleGlobalRefresh = async (): Promise<void> => {
-      if (isSystemRefreshing) return;
-      setIsSystemRefreshing(true);
-
-      let staysCount = 0;
-      let flightsUpdated = 0;
-
-      try {
-          const token = await staysService.authenticate();
-          const staysReservations = await staysService.fetchReservations(token);
-
-          for(const staysRes of staysReservations) {
-              const existing = reservations.find(r => r.externalId === staysRes._id);
-              if(!existing) {
-                   const newRes = staysService.normalizeToApp(staysRes);
-                   const reservationToAdd: Reservation = {
-                       ...newRes,
-                       createdAt: Date.now(),
-                       updatedAt: Date.now()
-                   };
-                   await storageService.reservations.add(reservationToAdd);
-                   staysCount++;
-              }
-          }
-
-          const today = new Date(); today.setHours(0,0,0,0);
-          const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-
-          const targetReservations = reservations.filter(r => {
-              const checkIn = new Date(r.checkInDate); checkIn.setHours(0,0,0,0);
-              const isRelevantDate = checkIn.getTime() === today.getTime() || checkIn.getTime() === tomorrow.getTime();
-              const hasFlightInfo = r.flightInfo || r.flightData;
-              return isRelevantDate && hasFlightInfo;
-          });
-
-          for (const res of targetReservations) {
-              const flightCode = res.flightInfo || res.flightData?.number;
-              if (flightCode) {
-                  const flightData = await checkFlightStatus(flightCode);
-                  if (flightData) {
-                      const reservationUpdate: Partial<Reservation> = { id: res.id, flightData };
-                      await storageService.reservations.update(reservationUpdate as Reservation);
-                      flightsUpdated++;
-                  }
-              }
-          }
-
-          setLastSystemRefresh(new Date());
-          addLog("System Refresh", `Atualizou ${staysCount} reservas e ${flightsUpdated} voos.`);
-          addNotification('Sistema Atualizado', `${staysCount} novas reservas e ${flightsUpdated} voos atualizados.`, 'success');
-
-      } catch (error) {
-          console.error("Global Refresh Error:", error);
-          alert("Erro durante a atualização do sistema. Verifique a conexão.");
-      } finally {
-          setIsSystemRefreshing(false);
-      }
+  const handleOpenFieldApp = (): void => {
+    setActiveModule('field_app');
   };
+
+  // Handlers para filtro de período (Manutenção)
+  const handlePeriodPresetChange = (preset: PeriodPreset): void => {
+    setPeriodPreset(preset);
+  };
+
+  const handleCustomDateChange = (startDate: string, endDate: string): void => {
+    setCustomStartDate(startDate);
+    setCustomEndDate(endDate);
+  };
+
+  // Handlers para filtro de período (Guest)
+  const handleGuestPeriodPresetChange = (preset: PeriodPreset): void => {
+    setGuestPeriodPreset(preset);
+  };
+
+  const handleGuestCustomDateChange = (startDate: string, endDate: string): void => {
+    setGuestCustomStartDate(startDate);
+    setGuestCustomEndDate(endDate);
+  };
+
 
   // Maintenance Filters Hook
   const { filteredTickets, maintenanceGroups } = useMaintenanceFilters({
@@ -459,6 +428,23 @@ function AppContent() {
     filterMaintenanceProperty,
     filterMaintenanceType,
     activeModule,
+    periodPreset,
+    customStartDate,
+    customEndDate,
+    maintenanceOverrides,
+  });
+
+  // Maintenance Pagination Hook
+  const resetTrigger = `${searchTerm}-${filterStatus}-${filterMaintenanceAssignee}-${filterMaintenanceProperty}-${filterMaintenanceType}-${periodPreset}-${customStartDate}-${customEndDate}`;
+  const {
+    paginatedGroups,
+    hasMore: hasMoreMaintenanceItems,
+    loadMore: loadMoreMaintenanceItems,
+    displayCount: maintenanceDisplayCount,
+    totalItems: maintenanceTotalItems,
+  } = useMaintenancePagination({
+    groups: maintenanceGroups,
+    resetTrigger,
   });
 
   const getGridClass = (): string => {
@@ -617,8 +603,6 @@ function AppContent() {
             viewMode={viewMode}
             sidebarOpen={sidebarOpen}
             mobileMenuOpen={mobileMenuOpen}
-            isSystemRefreshing={isSystemRefreshing}
-            lastSystemRefresh={lastSystemRefresh}
             onModuleChange={(module, view) => {
               setActiveModule(module);
               setViewMode(view);
@@ -626,7 +610,6 @@ function AppContent() {
             onViewModeChange={setViewMode}
             onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
             onCloseMobileMenu={() => setMobileMenuOpen(false)}
-            onGlobalRefresh={handleGlobalRefresh}
             onLogout={handleLogout}
           />
       </aside>
@@ -638,8 +621,6 @@ function AppContent() {
             viewMode={viewMode}
             sidebarOpen={sidebarOpen}
             mobileMenuOpen={mobileMenuOpen}
-            isSystemRefreshing={isSystemRefreshing}
-            lastSystemRefresh={lastSystemRefresh}
             onModuleChange={(module, view) => {
               setActiveModule(module);
               setViewMode(view);
@@ -647,7 +628,6 @@ function AppContent() {
             onViewModeChange={setViewMode}
             onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
             onCloseMobileMenu={() => setMobileMenuOpen(false)}
-            onGlobalRefresh={handleGlobalRefresh}
             onLogout={handleLogout}
           />
       </aside>
@@ -681,7 +661,7 @@ function AppContent() {
               <MaintenanceView
                 tickets={tickets}
                 filteredTickets={filteredTickets}
-                maintenanceGroups={maintenanceGroups}
+                maintenanceGroups={paginatedGroups}
                 viewMode={viewMode}
                 currentMonth={currentMonth}
                 setCurrentMonth={setCurrentMonth}
@@ -693,8 +673,19 @@ function AppContent() {
                 filterMaintenanceType={filterMaintenanceType}
                 setFilterMaintenanceType={setFilterMaintenanceType}
                 setSelectedReservation={setSelectedReservation}
+                staysReservations={staysReservations}
                 activeModule={activeModule}
                 gridColumns={gridColumns}
+                periodPreset={periodPreset}
+                customStartDate={customStartDate}
+                customEndDate={customEndDate}
+                onPeriodPresetChange={handlePeriodPresetChange}
+                onCustomDateChange={handleCustomDateChange}
+                hasMoreItems={hasMoreMaintenanceItems}
+                onLoadMore={loadMoreMaintenanceItems}
+                totalItems={maintenanceTotalItems}
+                displayCount={maintenanceDisplayCount}
+                addNotification={addNotification}
               />
            )}
 
@@ -711,6 +702,11 @@ function AppContent() {
                tickets={tickets}
                staysLoading={staysLoading}
                gridColumns={gridColumns}
+               guestPeriodPreset={guestPeriodPreset}
+               guestCustomStartDate={guestCustomStartDate}
+               guestCustomEndDate={guestCustomEndDate}
+               onGuestPeriodPresetChange={handleGuestPeriodPresetChange}
+               onGuestCustomDateChange={handleGuestCustomDateChange}
              />
            )}
 
@@ -739,6 +735,7 @@ function AppContent() {
              staysCalendarData={staysCalendarData}
              selectedBoard={selectedBoard}
              setSelectedBoard={setSelectedBoard}
+             setSelectedReservation={setSelectedReservation}
              addLog={addLog}
              updatePropertyInState={updatePropertyInState}
              createInventoryItem={createInventoryItem}
@@ -746,6 +743,7 @@ function AppContent() {
              deleteInventoryItem={deleteInventoryItem}
              createInventoryTransaction={createInventoryTransaction}
              handleActivateTablet={handleActivateTablet}
+             handleOpenFieldApp={handleOpenFieldApp}
            />
 
         </main>
@@ -783,6 +781,7 @@ function AppContent() {
         properties={properties}
         currentUser={currentUser}
         tickets={tickets}
+        staysReservations={staysReservations}
         onReservationSubmit={() => {}}
         onUpdateReservation={() => {}}
         onAddExpense={() => {}}

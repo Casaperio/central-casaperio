@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Property, InventoryItem, InventoryCategory, Supplier, ServiceTypeDefinition, AfterHoursConfig, AfterHoursRule } from '../types';
-import { Trash2, Plus, Settings, Home, AlertTriangle, PenTool, Tablet, Package, Box, Edit2, Check, X, Briefcase, Phone, Mail, DollarSign, Clock, MessageSquare, Calendar } from 'lucide-react';
+import { Trash2, Plus, Settings, Home, AlertTriangle, PenTool, Tablet, Package, Box, Edit2, Check, X, Briefcase, Phone, Mail, DollarSign, Clock, MessageSquare, Calendar, Smartphone } from 'lucide-react';
 import { generateId } from '../utils';
 
 interface SettingsPanelProps {
@@ -9,7 +9,7 @@ interface SettingsPanelProps {
  serviceTypes: (string | ServiceTypeDefinition)[];
  inventoryItems?: InventoryItem[];
  suppliers?: Supplier[];
- initialTab?: 'properties' | 'priorities' | 'services' | 'tablet' | 'catalog' | 'suppliers';
+ initialTab?: 'properties' | 'priorities' | 'services' | 'tablet' | 'catalog' | 'suppliers' | 'field_app';
  afterHoursConfig?: AfterHoursConfig;
  onAddProperty: (code: string, address: string) => void;
  onDeleteProperty: (code: string) => void;
@@ -26,6 +26,7 @@ interface SettingsPanelProps {
  onUpdateSupplier?: (item: Supplier) => void;
  onUpdateSettings?: (settings: any) => void;
  onActivateTablet?: (propertyCode: string) => void;
+ onOpenFieldApp?: () => void;
 }
 
 const SettingsPanel: React.FC<SettingsPanelProps> = ({
@@ -50,9 +51,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
  onDeleteSupplier,
  onUpdateSupplier,
  onUpdateSettings,
- onActivateTablet
+ onActivateTablet,
+ onOpenFieldApp
 }) => {
- const [activeTab, setActiveTab] = useState<'properties' | 'priorities' | 'services' | 'tablet' | 'catalog' | 'suppliers'>(initialTab);
+ const [activeTab, setActiveTab] = useState<'properties' | 'priorities' | 'services' | 'tablet' | 'catalog' | 'suppliers' | 'field_app'>(initialTab);
 
  const [newPropCode, setNewPropCode] = useState('');
  const [newPropAddress, setNewPropAddress] = useState('');
@@ -300,6 +302,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
      className={`pb-3 px-4 text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'tablet' ? 'border-b-2 border-brand-600 text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
     >
      <Tablet size={18} /> Configurar Tablet
+    </button>
+    <button
+     type="button"
+     onClick={() => setActiveTab('field_app')}
+     className={`pb-3 px-4 text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'field_app' ? 'border-b-2 border-brand-600 text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
+    >
+     <Smartphone size={18} /> App de Campo
     </button>
    </div>
 
@@ -791,6 +800,66 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </div>
             </div>
           )}
+        </div>
+      </div>
+    )}
+
+    {activeTab === 'field_app' && (
+      <div className="space-y-6 animate-fade-in">
+        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+          <h3 className="text-blue-800 font-bold flex items-center gap-2 mb-2">
+            <Smartphone size={20} /> App de Campo
+          </h3>
+          <p className="text-sm text-blue-700 leading-relaxed">
+            O App de Campo é uma interface mobile otimizada para técnicos de manutenção.
+            Permite visualizar tickets atribuídos, iniciar trabalhos, registrar conclusões com fotos e acompanhar localização em tempo real via GPS.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="bg-white border border-gray-200 p-6 rounded-lg">
+            <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+              <Smartphone size={18} className="text-brand-600" /> Acesso ao App de Campo
+            </h4>
+            <p className="text-sm text-gray-600 mb-4">
+              Clique no botão abaixo para abrir o App de Campo. Você verá apenas os tickets atribuídos ao seu usuário.
+            </p>
+
+            <button
+              type="button"
+              onClick={onOpenFieldApp}
+              disabled={!onOpenFieldApp}
+              className="w-full md:w-auto bg-brand-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center gap-2"
+            >
+              <Smartphone size={20} /> Abrir App de Campo
+            </button>
+          </div>
+
+          <div className="bg-gray-50 border border-gray-200 p-6 rounded-lg">
+            <h4 className="font-bold text-gray-800 mb-3">Funcionalidades</h4>
+            <ul className="space-y-2 text-sm text-gray-600">
+              <li className="flex items-start gap-2">
+                <span className="text-brand-600 font-bold">•</span>
+                <span>Visualização de tickets atribuídos a você (regular e checkout)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-brand-600 font-bold">•</span>
+                <span>Rastreamento GPS em tempo real para localização do técnico</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-brand-600 font-bold">•</span>
+                <span>Iniciar e finalizar trabalhos com relatórios fotográficos</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-brand-600 font-bold">•</span>
+                <span>Acesso direto a códigos de porta e informações do imóvel</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-brand-600 font-bold">•</span>
+                <span>Interface mobile-first otimizada para uso em campo</span>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
     )}

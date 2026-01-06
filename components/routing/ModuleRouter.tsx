@@ -65,6 +65,7 @@ interface ModuleRouterProps {
   staysCalendarData: any;
   selectedBoard: Board | null;
   setSelectedBoard: (board: Board | null) => void;
+  setSelectedReservation: (reservation: Reservation | null) => void;
   addLog: (action: string, details: string) => void;
   updatePropertyInState: (property: PropertyCharacteristics) => void;
   createInventoryItem: (item: Omit<InventoryItem, 'id' | 'updatedAt'>) => Promise<InventoryItem>;
@@ -80,6 +81,7 @@ interface ModuleRouterProps {
     notes?: string;
   }) => Promise<void>;
   handleActivateTablet: (propertyCode: string) => void;
+  handleOpenFieldApp: () => void;
 }
 
 export function ModuleRouter({
@@ -106,6 +108,7 @@ export function ModuleRouter({
   staysCalendarData,
   selectedBoard,
   setSelectedBoard,
+  setSelectedReservation,
   addLog,
   updatePropertyInState,
   createInventoryItem,
@@ -113,6 +116,7 @@ export function ModuleRouter({
   deleteInventoryItem,
   createInventoryTransaction,
   handleActivateTablet,
+  handleOpenFieldApp,
 }: ModuleRouterProps) {
 
   if (viewMode === 'stats') {
@@ -180,6 +184,7 @@ export function ModuleRouter({
         onDeleteSupplier={(id) => storageService.suppliers.delete(id)}
         onUpdateSupplier={(supplier) => storageService.suppliers.update(supplier)}
         onActivateTablet={handleActivateTablet}
+        onOpenFieldApp={handleOpenFieldApp}
       />
     );
   }
@@ -297,7 +302,7 @@ export function ModuleRouter({
   }
 
   if (viewMode === 'financial') {
-    return <FinancialPanel reservations={staysReservations} />;
+    return <FinancialPanel reservations={staysReservations} properties={properties} />;
   }
 
   if (viewMode === 'map') {
@@ -328,8 +333,17 @@ export function ModuleRouter({
       <Suspense fallback={<LoadingFallback />}>
         <GeneralCalendar
           units={staysCalendarData?.units || []}
-          onReservationClick={(res) => {
-            // Handled in parent
+          onReservationClick={(calendarRes) => {
+            // Find full reservation from staysReservations using bookingId
+            const fullReservation = staysReservations.find(
+              r => r.externalId === calendarRes.bookingId || r.id === calendarRes.bookingId
+            );
+
+            if (fullReservation) {
+              setSelectedReservation(fullReservation);
+            } else {
+              console.warn('Reserva não encontrada:', calendarRes.bookingId);
+            }
           }}
         />
       </Suspense>

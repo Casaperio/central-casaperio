@@ -1,10 +1,12 @@
 import React from 'react';
-import { AlertCircle, CalendarClock, LogOut as LogOutIcon } from 'lucide-react';
+import { AlertCircle, CalendarClock, LogOut as LogOutIcon, ChevronDown } from 'lucide-react';
 import { Ticket, TicketStatus, Reservation, AppModule } from '../../types';
-import { MaintenanceGroup, MaintenanceItem } from '../../hooks/features/useMaintenanceFilters';
+import { MaintenanceGroup, MaintenanceItem, PeriodPreset } from '../../hooks/features/useMaintenanceFilters';
 import { SkeletonCard, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import { TypeFilter } from './TypeFilter';
+import PeriodFilter from './PeriodFilter';
+import { resolveReservationForCheckoutTicket } from '../../utils';
 
 interface MaintenanceViewProps {
   tickets: Ticket[];
@@ -13,16 +15,27 @@ interface MaintenanceViewProps {
   viewMode: string;
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
-  setSelectedTicket: (ticket: Ticket) => void;
+  setSelectedTicket: (ticket: Ticket | null) => void;
   searchTerm: string;
   filterStatus: string;
   filterMaintenanceAssignee: string;
   filterMaintenanceProperty: string;
   filterMaintenanceType: string;
   setFilterMaintenanceType: (type: string) => void;
-  setSelectedReservation: (reservation: Reservation) => void;
+  setSelectedReservation: (reservation: Reservation | null) => void;
+  staysReservations: Reservation[];
   activeModule: AppModule;
   gridColumns: number;
+  periodPreset: PeriodPreset;
+  customStartDate: string;
+  customEndDate: string;
+  onPeriodPresetChange: (preset: PeriodPreset) => void;
+  onCustomDateChange: (startDate: string, endDate: string) => void;
+  hasMoreItems: boolean;
+  onLoadMore: () => void;
+  totalItems: number;
+  displayCount: number;
+  addNotification?: (title: string, message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
 export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
@@ -40,13 +53,55 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   filterMaintenanceType,
   setFilterMaintenanceType,
   setSelectedReservation,
+  staysReservations,
   activeModule,
-  gridColumns
+  gridColumns,
+  periodPreset,
+  customStartDate,
+  customEndDate,
+  onPeriodPresetChange,
+  onCustomDateChange,
+  hasMoreItems,
+  onLoadMore,
+  totalItems,
+  displayCount,
+  addNotification
 }) => {
   const getGridClass = () => {
     if (gridColumns === 2) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2';
     if (gridColumns === 4) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4';
     return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+  };
+
+  const handleTicketClick = (ticket: Ticket) => {
+    // Se for ticket automático de checkout, tentar resolver a reserva
+    if (ticket.isCheckoutTicket) {
+      const { reservation, logs } = resolveReservationForCheckoutTicket(ticket, staysReservations);
+
+      console.log('[handleTicketClick] Resolução de checkout:', logs);
+
+      if (reservation) {
+        // Encontrou a reserva -> abrir ReservationDetailModal APENAS
+        // Limpar selectedTicket para garantir que não abre TicketDetailModal também
+        setSelectedTicket(null);
+        setSelectedReservation(reservation);
+        return;
+      } else {
+        // Não encontrou a reserva -> mostrar toast e abrir TicketDetailModal como fallback
+        if (addNotification) {
+          addNotification(
+            'Reserva não encontrada',
+            'Não foi possível localizar a reserva correspondente. Exibindo ticket.',
+            'warning'
+          );
+        }
+        // Fallback: limpar reserva e abrir ticket
+        setSelectedReservation(null);
+      }
+    }
+
+    // Fallback: abrir modal de ticket normal
+    setSelectedTicket(ticket);
   };
 
   if (viewMode === 'calendar') {
@@ -56,7 +111,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
         tickets={filteredTickets}
         currentDate={currentMonth}
         onDateChange={setCurrentMonth}
-        onItemClick={setSelectedTicket}
+        onItemClick={handleTicketClick}
       />
     );
   }
@@ -67,6 +122,20 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
 
   return (
     <div className={viewMode === 'cards' ? "space-y-8" : "space-y-4"}>
+      {/* Filtro de Período - Para Manutenção e Concierge */}
+      {(activeModule === 'maintenance' || activeModule === 'concierge') && (
+        <div className="mb-4">
+          <PeriodFilter
+            selectedPreset={periodPreset}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+            onPresetChange={onPeriodPresetChange}
+            onCustomDateChange={onCustomDateChange}
+          />
+        </div>
+      )}
+
+      {/* Filtro de Tipo - Somente para Manutenção */}
       {activeModule === 'maintenance' && (
         <div className="mb-4">
           <TypeFilter
@@ -145,7 +214,10 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                     return (
                       <div
                         key={ticket.id}
-                        onClick={() => setSelectedTicket(ticket)}
+                        onClick={() => {
+                          console.log('[CLICK-AGUARDANDO]', ticket.id, ticket.propertyCode, ticket.isCheckoutTicket);
+                          handleTicketClick(ticket);
+                        }}
                         className={`bg-white p-4 rounded-lg border shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden flex flex-col min-w-0 ${
                           isExpired ? 'ring-2 ring-red-500 bg-red-50/20' :
                           ticket.isCheckoutTicket ? 'ring-2 ring-violet-400 bg-violet-50/30' :
@@ -180,12 +252,28 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
               </div>
             ))
           )}
+
+          {/* Botão Ver Mais */}
+          {hasMoreItems && maintenanceGroups.length > 0 && (
+            <div className="flex justify-center pt-6">
+              <button
+                onClick={onLoadMore}
+                className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-brand-700 bg-brand-50 border border-brand-200 rounded-lg hover:bg-brand-100 transition-colors"
+              >
+                <span>Ver mais</span>
+                <ChevronDown size={18} />
+                <span className="text-xs text-gray-500">
+                  ({displayCount} de {totalItems})
+                </span>
+              </button>
+            </div>
+          )}
         </>
       ) : (
         filteredTickets.map(ticket => (
           <div
             key={ticket.id}
-            onClick={() => setSelectedTicket(ticket)}
+            onClick={() => handleTicketClick(ticket)}
             className={`bg-white p-3 rounded-lg border flex items-center justify-between hover:bg-gray-50 cursor-pointer transition-colors ${
               ticket.isCheckoutTicket ? 'border-violet-300 bg-violet-50/30' :
               ticket.isGuestRequest ? 'border-yellow-300 bg-yellow-50/30' :

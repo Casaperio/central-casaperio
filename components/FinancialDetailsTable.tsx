@@ -6,9 +6,10 @@ import { getDetailedFinancials } from '../services/staysApiService';
 interface FinancialDetailsTableProps {
  from?: string;
  to?: string;
+ selectedPropertyCodes?: string[];
 }
 
-const FinancialDetailsTable: React.FC<FinancialDetailsTableProps> = ({ from, to }) => {
+const FinancialDetailsTable: React.FC<FinancialDetailsTableProps> = ({ from, to, selectedPropertyCodes = [] }) => {
  const [reservations, setReservations] = useState<ReservationFinancialDetails[]>([]);
  const [loading, setLoading] = useState(true);
  const [error, setError] = useState<string | null>(null);
@@ -49,14 +50,25 @@ const FinancialDetailsTable: React.FC<FinancialDetailsTableProps> = ({ from, to 
   setExpandedRows(newExpanded);
  };
 
- const filteredReservations = searchTerm
-  ? reservations.filter(
-    (r) =>
-     r.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     r.propertyCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     r.bookingCode.toLowerCase().includes(searchTerm.toLowerCase())
-   )
-  : reservations;
+ // Aplicar filtros em sequência: 1) imóveis selecionados, 2) busca
+ const filteredReservations = reservations
+   .filter(r => {
+     // Filtro de imóveis selecionados
+     if (selectedPropertyCodes.length > 0) {
+       return selectedPropertyCodes.includes(r.propertyCode);
+     }
+     return true;
+   })
+   .filter(r => {
+     // Filtro de busca
+     if (!searchTerm) return true;
+     const term = searchTerm.toLowerCase();
+     return (
+       r.guestName.toLowerCase().includes(term) ||
+       r.propertyCode.toLowerCase().includes(term) ||
+       r.bookingCode.toLowerCase().includes(term)
+     );
+   });
 
  const exportToCSV = () => {
   const headers = [

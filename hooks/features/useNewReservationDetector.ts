@@ -1,11 +1,36 @@
 import { useEffect, useRef } from 'react';
-import { Reservation } from '../../types';
+import { Reservation, User } from '../../types';
 import { playSuccessSound } from '../../utils/soundUtils';
 
 const STORAGE_KEY = 'casape_seen_reservation_ids';
 
+/**
+ * Verifica se o usuário deve receber notificações de novas reservas
+ * Regra: Admin OU Guest Relations OU Financeiro OU módulos (reservations/management/guest)
+ */
+function shouldReceiveNewReservationNotification(user: User | null): boolean {
+  if (!user) return false;
+
+  // Admin recebe tudo
+  if (user.role === 'Admin') return true;
+
+  // Guest Relations recebe
+  if (user.role === 'Guest Relations') return true;
+
+  // Financeiro recebe (se existir role específico, ajustar aqui)
+  // Por ora, verificamos se tem acesso ao módulo management
+  if (user.allowedModules?.includes('management')) return true;
+
+  // Usuários com acesso aos módulos de reservas, guest ou management
+  if (user.allowedModules?.includes('reservations')) return true;
+  if (user.allowedModules?.includes('guest')) return true;
+
+  return false;
+}
+
 interface UseNewReservationDetectorProps {
   staysReservations: Reservation[];
+  currentUser: User | null;
   onNewReservation: (reservations: Reservation[]) => void;
   addLog: (action: string, details: string) => void;
   addNotification: (title: string, message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
@@ -17,11 +42,15 @@ interface UseNewReservationDetectorProps {
  */
 export function useNewReservationDetector({
   staysReservations,
+  currentUser,
   onNewReservation,
   addLog,
   addNotification
 }: UseNewReservationDetectorProps) {
   const previousReservationsRef = useRef<Reservation[]>([]);
+
+  // Verificar se usuário tem permissão para receber notificações
+  const hasPermission = shouldReceiveNewReservationNotification(currentUser);
 
   useEffect(() => {
     console.log('🔍 [NEW RESERVATION DETECTOR] useEffect executou');
@@ -58,19 +87,26 @@ export function useNewReservationDetector({
               checkIn: r.checkInDate
             })));
 
-            // Trigger callback
-            onNewReservation(newOnes);
-            playSuccessSound();
-            addLog('Nova Reserva', `Detectadas ${newOnes.length} nova(s) reserva(s)`);
+            // VERIFICAR PERMISSÃO antes de disparar notificações
+            if (hasPermission) {
+              console.log('  ✅ Usuário tem permissão - disparando notificações');
 
-            // Notificação
-            const firstName = newOnes[0].guestName;
-            const msg = newOnes.length === 1
-              ? `${firstName} - ${newOnes[0].propertyCode}`
-              : `${firstName} e mais ${newOnes.length - 1}`;
-            addNotification('Nova Reserva!', msg, 'success');
+              // Trigger callback
+              onNewReservation(newOnes);
+              playSuccessSound();
+              addLog('Nova Reserva', `Detectadas ${newOnes.length} nova(s) reserva(s)`);
 
-            console.log('  ✅ Callbacks executados, som tocado');
+              // Notificação
+              const firstName = newOnes[0].guestName;
+              const msg = newOnes.length === 1
+                ? `${firstName} - ${newOnes[0].propertyCode}`
+                : `${firstName} e mais ${newOnes.length - 1}`;
+              addNotification('Nova Reserva!', msg, 'success');
+
+              console.log('  ✅ Callbacks executados, som tocado');
+            } else {
+              console.log('  ⛔ Usuário SEM permissão - notificações suprimidas');
+            }
           }
         } else {
           console.log('  📝 Nenhum histórico encontrado - primeira execução do app');
@@ -105,19 +141,26 @@ export function useNewReservationDetector({
         checkIn: r.checkInDate
       })));
 
-      // Trigger callback
-      onNewReservation(newOnes);
-      playSuccessSound();
-      addLog('Nova Reserva', `Detectadas ${newOnes.length} nova(s) reserva(s)`);
+      // VERIFICAR PERMISSÃO antes de disparar notificações
+      if (hasPermission) {
+        console.log('  ✅ Usuário tem permissão - disparando notificações');
 
-      // Notificação
-      const firstName = newOnes[0].guestName;
-      const msg = newOnes.length === 1
-        ? `${firstName} - ${newOnes[0].propertyCode}`
-        : `${firstName} e mais ${newOnes.length - 1}`;
-      addNotification('Nova Reserva!', msg, 'success');
+        // Trigger callback
+        onNewReservation(newOnes);
+        playSuccessSound();
+        addLog('Nova Reserva', `Detectadas ${newOnes.length} nova(s) reserva(s)`);
 
-      console.log('  ✅ Callbacks executados, som tocado');
+        // Notificação
+        const firstName = newOnes[0].guestName;
+        const msg = newOnes.length === 1
+          ? `${firstName} - ${newOnes[0].propertyCode}`
+          : `${firstName} e mais ${newOnes.length - 1}`;
+        addNotification('Nova Reserva!', msg, 'success');
+
+        console.log('  ✅ Callbacks executados, som tocado');
+      } else {
+        console.log('  ⛔ Usuário SEM permissão - notificações suprimidas');
+      }
     } else {
       console.log('  ℹ️ Nenhuma reserva nova - estado inalterado');
     }
@@ -127,5 +170,5 @@ export function useNewReservationDetector({
     const currentIds = staysReservations.map(r => r.id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(currentIds));
     console.log('  💾 Referência atualizada + localStorage sincronizado');
-  }, [staysReservations, onNewReservation, addLog, addNotification]);
+  }, [staysReservations, currentUser, hasPermission, onNewReservation, addLog, addNotification]);
 }

@@ -1,25 +1,50 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Reservation, ReservationStatus, User, FlightData, Ticket } from '../types';
-import { X, Calendar, User as UserIcon, ChevronLeft, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby } from 'lucide-react';
+import { X, Calendar, User as UserIcon, ChevronLeft, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby, Repeat, MessageSquare } from 'lucide-react';
 import { checkFlightStatus } from '../services/geminiService';
+import { storageService } from '../services/storage';
 
 interface ReservationDetailModalProps {
  reservation: Reservation;
  currentUser: User;
  tickets?: Ticket[]; // Added to show linked tickets
+ staysReservations?: Reservation[]; // Para calcular histórico do hóspede
  onCreateTicket: () => void;
  onClose: () => void;
  onUpdateDetails: (id: string, data: Partial<Reservation>) => void;
  onDelete: (id: string) => void;
+ onDismissCheckout?: (reservation: Reservation) => void; // Para dispensar checkouts automáticos
  onAddExpense: (reservationId: string, description: string, amount: number) => void;
  onDeleteExpense: (reservationId: string, expenseId: string) => void;
 }
 
+// Normaliza o nome do hóspede para consistência na contagem
+const normalizeGuestName = (name: string): string => {
+  return name
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+    .replace(/\s+/g, ' '); // Colapsa múltiplos espaços
+};
+
 const LANGUAGES = ['Português (Brasil)', 'Inglês', 'Espanhol', 'Francês', 'Alemão', 'Outro'];
 
-const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reservation, currentUser, tickets = [], onCreateTicket, onClose, onUpdateDetails, onDelete, onAddExpense, onDeleteExpense }) => {
- 
+const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reservation, currentUser, tickets = [], staysReservations = [], onCreateTicket, onClose, onUpdateDetails, onDelete, onDismissCheckout, onAddExpense, onDeleteExpense }) => {
+
  const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
+
+ // Calcula quantas reservas este hóspede já fez
+ const guestReservationCount = useMemo(() => {
+   if (!staysReservations.length) return 0;
+
+   const normalizedName = normalizeGuestName(reservation.guestName);
+   return staysReservations.filter(r => {
+     // Ignora reservas canceladas
+     if (r.status === 'Cancelada') return false;
+     return normalizeGuestName(r.guestName) === normalizedName;
+   }).length;
+ }, [staysReservations, reservation.guestName]);
 
  // Fields
  const [flightInfo, setFlightInfo] = useState(reservation.flightInfo || '');
@@ -57,38 +82,189 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  const [expenseAmount, setExpenseAmount] = useState('');
  const [showExpenseForm, setShowExpenseForm] = useState(false);
 
+ // Guest Note State
+ const [guestNote, setGuestNote] = useState('');
+ const [loadingNote, setLoadingNote] = useState(true);
+ const [savingNote, setSavingNote] = useState(false);
+ const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+ // Reservation Overrides State
+ const [loadingOverrides, setLoadingOverrides] = useState(true);
+ const [savingOverrides, setSavingOverrides] = useState(false);
+ const [isInitializing, setIsInitializing] = useState(true);
+
+ // Baseline para comparação de dirty state (snapshot inicial após merge de overrides)
+ const initialEditableRef = useRef<string | null>(null);
+ const baselineSetRef = useRef(false); // Flag: baseline já foi setado na inicialização?
+
+ // Função helper: extrai apenas campos editáveis do form (para comparação)
+ const getEditableFields = useCallback(() => {
+   return {
+     language,
+     docsSent,
+     docsSentToBuilding,
+     hasChildren,
+     wantsBedSplit,
+     flightInfo,
+     roomConfig,
+     notes,
+     specialAttention,
+     problemReported,
+     earlyCheckIn: { requested: earlyRequest, time: earlyTime, granted: earlyGranted },
+     lateCheckOut: { requested: lateRequest, time: lateTime, granted: lateGranted }
+   };
+ }, [language, docsSent, docsSentToBuilding, hasChildren, wantsBedSplit, flightInfo,
+     roomConfig, notes, specialAttention, problemReported, earlyRequest, earlyTime,
+     earlyGranted, lateRequest, lateTime, lateGranted]);
+
+ // Função helper: verifica se o form tem mudanças comparando com baseline
+ const hasFormChanges = useCallback(() => {
+   if (!initialEditableRef.current) return false;
+   const currentEditable = JSON.stringify(getEditableFields());
+   return currentEditable !== initialEditableRef.current;
+ }, [getEditableFields]);
+
  // Linked Tickets Logic
- const linkedTickets = tickets.filter(t => 
-   t.reservationId === reservation.id || 
+ const linkedTickets = tickets.filter(t =>
+   t.reservationId === reservation.id ||
    // Fallback: Tickets created during reservation for same property
-   (t.propertyCode === reservation.propertyCode && 
-    t.createdAt >= new Date(reservation.checkInDate).getTime() && 
+   (t.propertyCode === reservation.propertyCode &&
+    t.createdAt >= new Date(reservation.checkInDate).getTime() &&
     t.createdAt <= new Date(reservation.checkOutDate).getTime())
  ).sort((a,b) => b.createdAt - a.createdAt);
 
+ // Carrega a nota do hóspede do Firestore
  useEffect(() => {
-  // Check for any change
-  const isChanged =
-    flightInfo !== (reservation.flightInfo || '') ||
-    roomConfig !== (reservation.roomConfig || '') ||
-    hasChildren !== (reservation.hasChildren || false) ||
-    wantsBedSplit !== (reservation.wantsBedSplit || false) ||
-    notes !== (reservation.notes || '') ||
-    language !== (reservation.language || '') ||
-    docsSent !== reservation.docsSent ||
-    docsSentToBuilding !== (reservation.docsSentToBuilding || false) ||
-    specialAttention !== (reservation.specialAttention || false) ||
-    problemReported !== (reservation.problemReported || false) ||
-    earlyRequest !== (reservation.earlyCheckIn?.requested || false) ||
-    earlyTime !== (reservation.earlyCheckIn?.time || '') ||
-    earlyGranted !== (reservation.earlyCheckIn?.granted || false) ||
-    lateRequest !== (reservation.lateCheckOut?.requested || false) ||
-    lateTime !== (reservation.lateCheckOut?.time || '') ||
-    lateGranted !== (reservation.lateCheckOut?.granted || false) ||
-    (flightData?.lastUpdated !== reservation.flightData?.lastUpdated);
+   const loadGuestNote = async () => {
+     const guestKey = normalizeGuestName(reservation.guestName);
+     try {
+       const note = await storageService.guestNotes.get(guestKey);
+       if (note) {
+         setGuestNote(note.note || '');
+       }
+     } catch (error) {
+       console.error('Erro ao carregar nota do hóspede:', error);
+     } finally {
+       setLoadingNote(false);
+     }
+   };
 
-  setHasChanges(isChanged);
- }, [flightInfo, roomConfig, hasChildren, wantsBedSplit, notes, language, docsSent, docsSentToBuilding, specialAttention, problemReported, earlyRequest, earlyTime, earlyGranted, lateRequest, lateTime, lateGranted, reservation, flightData]);
+   loadGuestNote();
+ }, [reservation.guestName]);
+
+ // Carrega os overrides da reserva do Firestore
+ useEffect(() => {
+   const loadOverrides = async () => {
+     setIsInitializing(true); // Marca que está inicializando
+     baselineSetRef.current = false; // Reseta flag de baseline
+     const reservationId = reservation.id || reservation.externalId;
+     if (!reservationId) {
+       setLoadingOverrides(false);
+       setIsInitializing(false);
+       return;
+     }
+
+     try {
+       const overrides = await storageService.reservationOverrides.get(reservationId);
+       if (overrides) {
+         // Merge overrides com o estado atual
+         if (overrides.language !== undefined) setLanguage(overrides.language);
+         if (overrides.docsSent !== undefined) setDocsSent(overrides.docsSent);
+         if (overrides.docsSentToBuilding !== undefined) setDocsSentToBuilding(overrides.docsSentToBuilding);
+         if (overrides.hasChildren !== undefined) setHasChildren(overrides.hasChildren);
+         if (overrides.wantsBedSplit !== undefined) setWantsBedSplit(overrides.wantsBedSplit);
+         if (overrides.flightInfo !== undefined) setFlightInfo(overrides.flightInfo);
+         if (overrides.roomConfig !== undefined) setRoomConfig(overrides.roomConfig);
+         if (overrides.notes !== undefined) setNotes(overrides.notes);
+         if (overrides.specialAttention !== undefined) setSpecialAttention(overrides.specialAttention);
+         if (overrides.problemReported !== undefined) setProblemReported(overrides.problemReported);
+         if (overrides.earlyCheckIn !== undefined) {
+           setEarlyRequest(overrides.earlyCheckIn.requested);
+           setEarlyTime(overrides.earlyCheckIn.time);
+           setEarlyGranted(overrides.earlyCheckIn.granted);
+         }
+         if (overrides.lateCheckOut !== undefined) {
+           setLateRequest(overrides.lateCheckOut.requested);
+           setLateTime(overrides.lateCheckOut.time);
+           setLateGranted(overrides.lateCheckOut.granted);
+         }
+       }
+     } catch (error) {
+       console.error('Erro ao carregar overrides da reserva:', error);
+     } finally {
+       setLoadingOverrides(false);
+       // Aguarda um tick para garantir que todos os setStates foram processados
+       setTimeout(() => setIsInitializing(false), 0);
+     }
+   };
+
+   loadOverrides();
+ }, [reservation.id, reservation.externalId]);
+
+ // Seta o baseline inicial após carregar overrides (para comparação de dirty state)
+ useEffect(() => {
+   if (!isInitializing && !loadingOverrides && !loadingNote && !baselineSetRef.current) {
+     // Quando terminar de carregar overrides e notas, seta o baseline APENAS UMA VEZ
+     const initialEditable = JSON.stringify(getEditableFields());
+     initialEditableRef.current = initialEditable;
+     baselineSetRef.current = true; // Marca que baseline foi setado
+     setHasChanges(false);
+   }
+ }, [isInitializing, loadingOverrides, loadingNote]);
+
+ // Recalcula hasChanges quando qualquer campo editável mudar
+ useEffect(() => {
+   if (isInitializing || loadingOverrides || loadingNote) return; // Não recalcula durante inicialização/carregamento
+   const changed = hasFormChanges();
+   setHasChanges(changed);
+ }, [language, docsSent, docsSentToBuilding, hasChildren, wantsBedSplit, flightInfo,
+     roomConfig, notes, specialAttention, problemReported, earlyRequest, earlyTime,
+     earlyGranted, lateRequest, lateTime, lateGranted, isInitializing, loadingOverrides, loadingNote, hasFormChanges]);
+
+ // Salva a nota no Firestore com debounce de 1 segundo
+ const saveGuestNote = useCallback(async (noteText: string) => {
+   const guestKey = normalizeGuestName(reservation.guestName);
+   setSavingNote(true);
+
+   try {
+     await storageService.guestNotes.set({
+       guestKey,
+       guestName: reservation.guestName,
+       note: noteText,
+       updatedAt: Date.now(),
+       updatedBy: currentUser.name
+     });
+   } catch (error) {
+     console.error('Erro ao salvar nota do hóspede:', error);
+   } finally {
+     setSavingNote(false);
+   }
+ }, [reservation.guestName, currentUser.name]);
+
+ // Handler com debounce para evitar spam de writes
+ const handleGuestNoteChange = useCallback((value: string) => {
+   setGuestNote(value);
+
+   // Limpa o timer anterior
+   if (debounceTimerRef.current) {
+     clearTimeout(debounceTimerRef.current);
+   }
+
+   // Agenda o salvamento após 1 segundo de inatividade
+   debounceTimerRef.current = setTimeout(() => {
+     saveGuestNote(value);
+   }, 1000);
+ }, [saveGuestNote]);
+
+ // Cleanup do debounce timer
+ useEffect(() => {
+   return () => {
+     if (debounceTimerRef.current) {
+       clearTimeout(debounceTimerRef.current);
+     }
+   };
+ }, []);
+
 
  const getStatusColor = (status: ReservationStatus) => {
   switch(status) {
@@ -109,23 +285,52 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
   }
  };
 
- const handleSaveChanges = () => {
-   onUpdateDetails(reservation.id, {
-     flightInfo,
-     flightData, // Save Flight Data
-     roomConfig,
-     hasChildren,
-     wantsBedSplit,
-     notes,
-     language,
-     docsSent,
-     docsSentToBuilding,
-     specialAttention,
-     problemReported,
-     earlyCheckIn: { requested: earlyRequest, time: earlyTime, granted: earlyGranted },
-     lateCheckOut: { requested: lateRequest, time: lateTime, granted: lateGranted }
-   });
-   setHasChanges(false);
+ const handleDismissCheckout = (e: React.MouseEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if(window.confirm("Dispensar este checkout da lista de manutenção?\n\nEle não aparecerá mais na visualização, mas a reserva será mantida no sistema.")) {
+    if (onDismissCheckout) {
+      onDismissCheckout(reservation);
+      onClose();
+    }
+  }
+ };
+
+ const handleSaveChanges = async () => {
+   setSavingOverrides(true);
+   try {
+     await storageService.reservationOverrides.set({
+       reservationId: reservation.id,
+       externalId: reservation.externalId,
+       propertyCode: reservation.propertyCode,
+       guestName: reservation.guestName,
+       language,
+       docsSent,
+       docsSentToBuilding,
+       hasChildren,
+       wantsBedSplit,
+       earlyCheckIn: { requested: earlyRequest, time: earlyTime, granted: earlyGranted },
+       lateCheckOut: { requested: lateRequest, time: lateTime, granted: lateGranted },
+       flightInfo,
+       roomConfig,
+       notes,
+       specialAttention,
+       problemReported,
+       updatedAt: Date.now(),
+       updatedBy: currentUser.name
+     });
+
+     // Atualiza o baseline para o novo estado salvo
+     const newBaseline = JSON.stringify(getEditableFields());
+     initialEditableRef.current = newBaseline;
+     baselineSetRef.current = true; // Garante que flag permanece true
+     setHasChanges(false);
+   } catch (error) {
+     console.error('Erro ao salvar overrides da reserva:', error);
+     alert('Erro ao salvar alterações. Tente novamente.');
+   } finally {
+     setSavingOverrides(false);
+   }
  };
 
  const handleFetchFlight = async () => {
@@ -246,9 +451,16 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-bold text-gray-900">{reservation.guestName}</h3>
-              <p className="text-sm text-blue-700 mt-1">
-                {reservation.guestCount} Hóspedes {reservation.hasBabies && <span className="text-xs bg-white px-2 py-0.5 rounded-full ml-2 border border-blue-200">👶 Bebê</span>}
-              </p>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <p className="text-sm text-blue-700">
+                  {reservation.guestCount} Hóspedes {reservation.hasBabies && <span className="text-xs bg-white px-2 py-0.5 rounded-full ml-2 border border-blue-200">👶 Bebê</span>}
+                </p>
+                {guestReservationCount > 0 && (
+                  <span className="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded border border-purple-200 text-purple-700 bg-white">
+                    <Repeat size={12} /> {guestReservationCount} {guestReservationCount === 1 ? 'reserva' : 'reservas'}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           
@@ -302,6 +514,30 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
               </div>
              </div>
           </div>
+        </div>
+
+        {/* Guest Notes */}
+        <div className="bg-amber-50 rounded-none p-5 border border-amber-100">
+          <div className="flex items-center gap-2 mb-3">
+            <MessageSquare size={18} className="text-amber-700" />
+            <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wide">Observações sobre o Hóspede</h3>
+            {savingNote && <span className="text-xs text-amber-600 ml-auto">Salvando...</span>}
+            {!savingNote && guestNote && <span className="text-xs text-green-600 ml-auto">✓ Salvo</span>}
+          </div>
+          {loadingNote ? (
+            <div className="animate-pulse bg-amber-100 h-24 rounded"></div>
+          ) : (
+            <textarea
+              value={guestNote}
+              onChange={(e) => handleGuestNoteChange(e.target.value)}
+              className="w-full text-sm p-3 rounded border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none bg-white"
+              placeholder="Adicione observações internas sobre este hóspede (preferências, histórico, alertas, etc.)..."
+              rows={4}
+            />
+          )}
+          <p className="text-xs text-amber-700 mt-2">
+            💡 Nota: Estas observações são compartilhadas entre todas as reservas deste hóspede e são visíveis apenas para a equipe.
+          </p>
         </div>
 
         {/* Dates & Times (Early/Late) */}
@@ -675,20 +911,29 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
     <div className="p-4 md:p-6 border-t border-gray-100 bg-white md:bg-gray-50 md:rounded-b-2xl fixed md:static bottom-0 left-0 right-0 z-20 pb-safe">
       
       <div className="flex justify-between gap-3 items-center">
-        <button 
+        <button
         type="button"
-        onClick={handleDelete}
+        onClick={onDismissCheckout ? handleDismissCheckout : handleDelete}
         className="text-red-500 text-sm hover:text-red-700 hover:bg-red-50 py-3 md:py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors border border-red-100"
         >
-          <Trash2 size={16} /> <span className="hidden md:inline">Excluir</span>
+          <Trash2 size={16} /> <span className="hidden md:inline">{onDismissCheckout ? 'Dispensar' : 'Excluir'}</span>
         </button>
 
         {hasChanges && (
-         <button 
+         <button
           onClick={handleSaveChanges}
-          className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 md:py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 shadow-sm animate-fade-in"
+          disabled={savingOverrides}
+          className={`flex-1 md:flex-none ${savingOverrides ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white px-6 py-3 md:py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 shadow-sm animate-fade-in`}
          >
-           <Save size={16} /> Salvar Alterações
+           {savingOverrides ? (
+             <>
+               <RefreshCw size={16} className="animate-spin" /> Salvando...
+             </>
+           ) : (
+             <>
+               <Save size={16} /> Salvar Alterações
+             </>
+           )}
          </button>
         )}
       </div>

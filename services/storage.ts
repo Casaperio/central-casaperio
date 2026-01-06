@@ -1,8 +1,8 @@
 import { db, storage } from './firebase';
 import { BoardCardAttachment } from '../types';
-import { 
-  Ticket, UserWithPassword, LogEntry, Property, Reservation, 
-  GuestTip, GuestFeedback, MonitoredFlight, InventoryItem, 
+import {
+  Ticket, UserWithPassword, LogEntry, Property, Reservation,
+  GuestTip, GuestFeedback, GuestNote, ReservationOverrides, MonitoredFlight, InventoryItem,
   InventoryTransaction, Delivery, OfficeSupply, CompanyAsset, WorkShift,
   ConciergeOffer, Supplier, ServiceTypeDefinition,
   Board, BoardColumn, BoardCard, AfterHoursConfig, ChatMessage, CallSession
@@ -15,10 +15,12 @@ const COLLECTIONS = {
   RESERVATIONS: 'reservations',
   USERS: 'users',
   LOGS: 'logs',
-  PROPERTIES: 'properties', 
+  PROPERTIES: 'properties',
   SETTINGS: 'settings',
-  TIPS: 'tips', 
+  TIPS: 'tips',
   FEEDBACKS: 'feedbacks',
+  GUEST_NOTES: 'guest_notes',
+  RESERVATION_OVERRIDES: 'reservation_overrides',
   MONITORED_FLIGHTS: 'monitoredFlights',
   INVENTORY_ITEMS: 'inventory_items',
   INVENTORY_TRANSACTIONS: 'inventory_transactions',
@@ -37,7 +39,9 @@ const COLLECTIONS = {
   BOARD_CARDS: 'board_cards',
   // Communication
   MESSAGES: 'messages',
-  CALLS: 'calls'
+  CALLS: 'calls',
+  // Maintenance Overrides
+  MAINTENANCE_OVERRIDES: 'maintenance_overrides'
 };
 
 const ensureDb = () => {
@@ -256,6 +260,54 @@ export const storageService = {
         const { id, ...data } = feedback;
         await db.collection(COLLECTIONS.FEEDBACKS).add(cleanData(data));
      }
+  },
+
+  // --- GUEST NOTES ---
+  guestNotes: {
+    get: async (guestKey: string): Promise<GuestNote | null> => {
+      ensureDb();
+      const docRef = db.collection(COLLECTIONS.GUEST_NOTES).doc(sanitizeDocId(guestKey));
+      const doc = await docRef.get();
+      if (doc.exists) {
+        return { id: doc.id, ...doc.data() } as GuestNote;
+      }
+      return null;
+    },
+
+    set: async (guestNote: Omit<GuestNote, 'id'>): Promise<void> => {
+      ensureDb();
+      const { guestKey, ...data } = guestNote;
+      const docId = sanitizeDocId(guestKey);
+      await db.collection(COLLECTIONS.GUEST_NOTES).doc(docId).set(cleanData({
+        guestKey,
+        ...data
+      }), { merge: true });
+    }
+  },
+
+  // --- RESERVATION OVERRIDES ---
+  reservationOverrides: {
+    get: async (reservationId: string): Promise<ReservationOverrides | null> => {
+      ensureDb();
+      const docRef = db.collection(COLLECTIONS.RESERVATION_OVERRIDES).doc(sanitizeDocId(reservationId));
+      const doc = await docRef.get();
+      if (doc.exists) {
+        return { id: doc.id, ...doc.data() } as ReservationOverrides;
+      }
+      return null;
+    },
+
+    set: async (overrides: Omit<ReservationOverrides, 'id'>): Promise<void> => {
+      ensureDb();
+      // Preferir reservationId, fallback para externalId
+      const docId = sanitizeDocId(overrides.reservationId || overrides.externalId || '');
+      if (!docId) {
+        throw new Error('reservationId ou externalId é obrigatório');
+      }
+      await db.collection(COLLECTIONS.RESERVATION_OVERRIDES).doc(docId).set(cleanData({
+        ...overrides
+      }), { merge: true });
+    }
   },
 
   // --- INVENTORY ---
@@ -770,6 +822,48 @@ export const storageService = {
         console.error('Erro ao deletar arquivo:', error);
         // Don't throw - file might already be deleted or URL invalid
       }
+    }
+  },
+
+  // --- MAINTENANCE OVERRIDES ---
+  maintenanceOverrides: {
+    subscribe: (callback: (overrides: Record<string, { hidden: boolean; updatedAt: number }>) => void) => {
+      if (!db) return () => {};
+
+      const q = db.collection(COLLECTIONS.MAINTENANCE_OVERRIDES);
+      return q.onSnapshot((snapshot) => {
+        const overrides: Record<string, { hidden: boolean; updatedAt: number }> = {};
+        snapshot.docs.forEach(doc => {
+          const data = doc.data();
+          overrides[doc.id] = {
+            hidden: data.hidden || false,
+            updatedAt: data.updatedAt || Date.now()
+          };
+        });
+        callback(overrides);
+      }, (error) => {
+        console.error("Erro ao buscar maintenance overrides:", error);
+      });
+    },
+
+    hide: async (key: string) => {
+      ensureDb();
+      await db.collection(COLLECTIONS.MAINTENANCE_OVERRIDES).doc(key).set({
+        hidden: true,
+        updatedAt: Date.now(),
+        reason: 'dismissed_by_user'
+      });
+    },
+
+    unhide: async (key: string) => {
+      ensureDb();
+      await db.collection(COLLECTIONS.MAINTENANCE_OVERRIDES).doc(key).delete();
+    },
+
+    isHidden: async (key: string): Promise<boolean> => {
+      ensureDb();
+      const doc = await db.collection(COLLECTIONS.MAINTENANCE_OVERRIDES).doc(key).get();
+      return doc.exists && doc.data()?.hidden === true;
     }
   }
 };
