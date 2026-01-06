@@ -311,6 +311,7 @@ function AppContent() {
   // New Reservation Detector Hook
   useNewReservationDetector({
     staysReservations,
+    currentUser,
     onNewReservation: (newOnes) => {
       setNewReservations(newOnes);
       setShowConfetti(true);
