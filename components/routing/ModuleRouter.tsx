@@ -323,6 +323,7 @@ export function ModuleRouter({
           reservations={staysReservations}
           tickets={tickets}
           feedbacks={feedbacks}
+          currentUser={currentUser}
         />
       </Suspense>
     );

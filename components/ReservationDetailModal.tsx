@@ -92,6 +92,10 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  const [loadingOverrides, setLoadingOverrides] = useState(true);
  const [savingOverrides, setSavingOverrides] = useState(false);
  const [isInitializing, setIsInitializing] = useState(true);
+ 
+ // Task 41: Maintenance seen state
+ const [maintenanceSeenBy, setMaintenanceSeenBy] = useState<string | undefined>(reservation.maintenanceAck?.seenBy);
+ const [maintenanceSeenAt, setMaintenanceSeenAt] = useState<number | undefined>(reservation.maintenanceAck?.seenAt);
 
  // Baseline para comparação de dirty state (snapshot inicial após merge de overrides)
  const initialEditableRef = useRef<string | null>(null);
@@ -188,6 +192,9 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
            setLateTime(overrides.lateCheckOut.time);
            setLateGranted(overrides.lateCheckOut.granted);
          }
+         // Task 41: Load maintenance seen status
+         if (overrides.maintenanceSeenBy !== undefined) setMaintenanceSeenBy(overrides.maintenanceSeenBy);
+         if (overrides.maintenanceSeenAt !== undefined) setMaintenanceSeenAt(overrides.maintenanceSeenAt);
        }
      } catch (error) {
        console.error('Erro ao carregar overrides da reserva:', error);
@@ -316,6 +323,9 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
        notes,
        specialAttention,
        problemReported,
+       // Task 41: Save maintenance seen status
+       maintenanceSeenBy,
+       maintenanceSeenAt,
        updatedAt: Date.now(),
        updatedBy: currentUser.name
      });
@@ -351,12 +361,52 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
    setLoadingFlight(false);
  };
 
- const handleMaintenanceAck = () => {
+ const handleMaintenanceAck = async () => {
+   // Task 41: Save to Firestore instead of just updating local state
+   const seenBy = currentUser.name;
+   const seenAt = Date.now();
+   
+   setMaintenanceSeenBy(seenBy);
+   setMaintenanceSeenAt(seenAt);
+   
+   // Save to Firestore
+   setSavingOverrides(true);
+   try {
+     await storageService.reservationOverrides.set({
+       reservationId: reservation.id,
+       externalId: reservation.externalId,
+       propertyCode: reservation.propertyCode,
+       guestName: reservation.guestName,
+       language,
+       docsSent,
+       docsSentToBuilding,
+       hasChildren,
+       wantsBedSplit,
+       earlyCheckIn: { requested: earlyRequest, time: earlyTime, granted: earlyGranted },
+       lateCheckOut: { requested: lateRequest, time: lateTime, granted: lateGranted },
+       flightInfo,
+       roomConfig,
+       notes,
+       specialAttention,
+       problemReported,
+       maintenanceSeenBy: seenBy,
+       maintenanceSeenAt: seenAt,
+       updatedAt: Date.now(),
+       updatedBy: currentUser.name
+     });
+   } catch (error) {
+     console.error('Erro ao salvar status de manutenção:', error);
+     alert('Erro ao salvar. Tente novamente.');
+   } finally {
+     setSavingOverrides(false);
+   }
+   
+   // Also update the reservation object (for backward compatibility)
    onUpdateDetails(reservation.id, {
      maintenanceAck: {
        seen: true,
-       seenBy: currentUser.name,
-       seenAt: Date.now()
+       seenBy,
+       seenAt
      }
    });
  };
@@ -710,12 +760,12 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
                  <div>
                    <h4 className="font-bold text-gray-800 text-sm">Status Manutenção</h4>
                    <p className="text-xs text-gray-500">
-                     {reservation.maintenanceAck?.seen 
-                      ? `Visto por ${reservation.maintenanceAck.seenBy?.split(' ')[0]} em ${new Date(reservation.maintenanceAck.seenAt!).toLocaleDateString()}` 
+                     {maintenanceSeenAt 
+                      ? `Visto por ${maintenanceSeenBy?.split(' ')[0]} em ${new Date(maintenanceSeenAt).toLocaleDateString()}` 
                       : 'Ainda não visualizado ou possui alterações recentes.'}
                    </p>
                  </div>
-                 {!reservation.maintenanceAck?.seen ? (
+                 {!maintenanceSeenAt ? (
                    <button 
                     onClick={handleMaintenanceAck}
                     className="bg-gray-800 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-900 transition-colors flex items-center gap-2"

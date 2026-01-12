@@ -101,6 +101,9 @@ export interface ReservationOverrides {
   notes?: string;
   specialAttention?: boolean;
   problemReported?: boolean;
+  // Task 41: Maintenance seen status
+  maintenanceSeenBy?: string;
+  maintenanceSeenAt?: number;
   updatedAt: number;
   updatedBy: string;
 }
