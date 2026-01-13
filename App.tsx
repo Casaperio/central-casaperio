@@ -705,8 +705,6 @@ function AppContent() {
                 filterMaintenanceProperty={filterMaintenanceProperty}
                 filterMaintenanceType={filterMaintenanceType}
                 setFilterMaintenanceType={setFilterMaintenanceType}
-                setSelectedReservation={setSelectedReservation}
-                staysReservations={staysReservations}
                 activeModule={activeModule}
                 gridColumns={gridColumns}
                 periodPreset={periodPreset}
@@ -718,7 +716,6 @@ function AppContent() {
                 onLoadMore={loadMoreMaintenanceItems}
                 totalItems={maintenanceTotalItems}
                 displayCount={maintenanceDisplayCount}
-                addNotification={addNotification}
               />
            )}
 

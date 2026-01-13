@@ -1,12 +1,11 @@
 import React from 'react';
 import { AlertCircle, CalendarClock, LogOut as LogOutIcon, ChevronDown } from 'lucide-react';
-import { Ticket, TicketStatus, Reservation, AppModule } from '../../types';
+import { Ticket, TicketStatus, AppModule, Reservation } from '../../types';
 import { MaintenanceGroup, MaintenanceItem, PeriodPreset } from '../../hooks/features/useMaintenanceFilters';
 import { SkeletonCard, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import { TypeFilter } from './TypeFilter';
 import PeriodFilter from './PeriodFilter';
-import { resolveReservationForCheckoutTicket } from '../../utils';
 
 interface MaintenanceViewProps {
   tickets: Ticket[];
@@ -22,8 +21,6 @@ interface MaintenanceViewProps {
   filterMaintenanceProperty: string;
   filterMaintenanceType: string;
   setFilterMaintenanceType: (type: string) => void;
-  setSelectedReservation: (reservation: Reservation | null) => void;
-  staysReservations: Reservation[];
   activeModule: AppModule;
   gridColumns: number;
   periodPreset: PeriodPreset;
@@ -35,7 +32,6 @@ interface MaintenanceViewProps {
   onLoadMore: () => void;
   totalItems: number;
   displayCount: number;
-  addNotification?: (title: string, message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
 export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
@@ -52,8 +48,6 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   filterMaintenanceProperty,
   filterMaintenanceType,
   setFilterMaintenanceType,
-  setSelectedReservation,
-  staysReservations,
   activeModule,
   gridColumns,
   periodPreset,
@@ -64,8 +58,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   hasMoreItems,
   onLoadMore,
   totalItems,
-  displayCount,
-  addNotification
+  displayCount
 }) => {
   const getGridClass = () => {
     if (gridColumns === 2) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2';
@@ -74,34 +67,37 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   };
 
   const handleTicketClick = (ticket: Ticket) => {
-    // Se for ticket automático de checkout, tentar resolver a reserva
-    if (ticket.isCheckoutTicket) {
-      const { reservation, logs } = resolveReservationForCheckoutTicket(ticket, staysReservations);
-
-      console.log('[handleTicketClick] Resolução de checkout:', logs);
-
-      if (reservation) {
-        // Encontrou a reserva -> abrir ReservationDetailModal APENAS
-        // Limpar selectedTicket para garantir que não abre TicketDetailModal também
-        setSelectedTicket(null);
-        setSelectedReservation(reservation);
-        return;
-      } else {
-        // Não encontrou a reserva -> mostrar toast e abrir TicketDetailModal como fallback
-        if (addNotification) {
-          addNotification(
-            'Reserva não encontrada',
-            'Não foi possível localizar a reserva correspondente. Exibindo ticket.',
-            'warning'
-          );
-        }
-        // Fallback: limpar reserva e abrir ticket
-        setSelectedReservation(null);
-      }
-    }
-
-    // Fallback: abrir modal de ticket normal
+    // Task 34: SEMPRE abrir o modal simples de manutenção (TicketDetailModal)
+    // Nunca abrir ReservationDetailModal para tickets de manutenção
+    // O modal de manutenção é operacional e não exibe dados de hóspedes
     setSelectedTicket(ticket);
+  };
+
+  const handleCheckoutCardClick = (reservation: any) => {
+    // Task 33 + 34: Ao clicar em card de checkout virtual, criar ticket virtual
+    // e abrir o TicketDetailModal (modal simples) com dados operacionais
+    const virtualTicket: Ticket = {
+      id: `virtual-checkout-${reservation.id}`,
+      propertyCode: reservation.propertyCode,
+      propertyName: reservation.propertyName || reservation.propertyCode,
+      priority: 'Alta',
+      serviceType: 'Limpeza de Check-out',
+      description: `Limpeza de check-out automática - Hóspede: ${reservation.guestName}`,
+      desiredDate: reservation.checkOutDate,
+      guestAuth: false,
+      status: 'Aberto' as TicketStatus,
+      createdBy: 'Sistema',
+      createdByName: 'Automação de Check-out',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      reservationId: reservation.id,
+      isCheckoutTicket: true,
+      category: 'maintenance' as const,
+      expenses: [],
+      _isVirtual: true, // Flag especial para indicar que é virtual
+    } as any;
+
+    setSelectedTicket(virtualTicket);
   };
 
   if (viewMode === 'calendar') {
@@ -174,7 +170,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                 </h3>
                 <div className={`grid gap-4 ${getGridClass()}`}>
                   {group.items.map((item, index) => {
-                    // Verificar se é um checkout
+                    // Task 33 + 34: Exibir cards de checkout e ao clicar abrir modal simples
                     if ('type' in item && item.type === 'checkout') {
                       const r = item.reservation;
                       const checkoutDate = new Date(r.checkOutDate);
@@ -184,7 +180,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                       return (
                         <div
                           key={`checkout-${r.id}`}
-                          onClick={() => setSelectedReservation(r)}
+                          onClick={() => handleCheckoutCardClick(r)}
                           className={`bg-white p-4 rounded-lg border shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden flex flex-col min-w-0 ${
                             isToday ? 'ring-2 ring-red-400 bg-red-50/30' :
                             isTomorrow ? 'ring-2 ring-orange-400 bg-orange-50/30' :
@@ -199,10 +195,15 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-violet-50 text-violet-700">
                               {isToday ? 'HOJE' : isTomorrow ? 'AMANHÃ' : checkoutDate.toLocaleDateString('pt-BR')}
                             </span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700">
+                              Limpeza de Check-out
+                            </span>
                           </div>
 
                           <h3 className="mb-1 text-base font-bold text-gray-900 truncate">{r.propertyCode}</h3>
-                          <p className="h-10 mb-3 text-sm text-gray-500 line-clamp-2">{r.guestName}</p>
+                          <p className="h-10 mb-3 text-sm text-gray-500 line-clamp-2">
+                            Limpeza de check-out automática
+                          </p>
                         </div>
                       );
                     }
@@ -231,13 +232,18 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                         {ticket.isGuestRequest && !ticket.isCheckoutTicket && <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider">Hóspede</div>}
                         {ticket.isPreventive && !ticket.isCheckoutTicket && <div className="absolute top-0 right-0 bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider flex items-center gap-1">PREVENTIVA</div>}
 
-                        <div className="flex items-start justify-between mt-2 mb-2">
+                        <div className="flex items-start justify-between mt-2 mb-2 flex-wrap gap-1">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
                             ${ticket.status === TicketStatus.OPEN ? 'bg-red-50 text-red-700' :
                               ticket.status === TicketStatus.IN_PROGRESS ? 'bg-yellow-50 text-yellow-700' :
                               'bg-green-50 text-green-700'}`}>
                             {ticket.status}
                           </span>
+                          {ticket.isCheckoutTicket && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700">
+                              Limpeza de Check-out
+                            </span>
+                          )}
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${ticket.priority === 'Urgente' ? 'border-red-100 text-red-600 bg-red-50' : 'border-gray-100 text-gray-500 bg-gray-50'}`}>
                             {ticket.priority}
                           </span>
