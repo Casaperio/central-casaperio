@@ -87,6 +87,7 @@ export interface ReservationOverrides {
   id: string; // reservationId ou externalId
   reservationId?: string; // ID da reserva (preferencial)
   externalId?: string; // ID externo (fallback)
+  source?: string; // Fonte da reserva ('Stays', 'Manual', etc) - usado para gerar chave correta
   propertyCode: string;
   guestName: string;
   language?: string;
