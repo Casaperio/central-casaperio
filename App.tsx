@@ -20,6 +20,7 @@ import PlatformIcon from './components/PlatformIcon';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 import { playSuccessSound } from './utils/soundUtils';
+import { canAccessView, canAccessModule, getFirstAllowedModule, getDefaultViewForModule as getDefaultViewFromPermissions, getAccessDeniedMessage } from './utils/permissions';
 
 // Icons
 import {
@@ -119,6 +120,38 @@ function AppContent() {
       setViewMode(getDefaultViewForModule(primaryModule));
     }
   }, [currentUser, viewMode, getPrimaryModuleForRole, getDefaultViewForModule, setActiveModule, setViewMode]);
+
+  // GUARD: Check permissions and redirect if user doesn't have access
+  useEffect(() => {
+    if (!currentUser) return;
+    if (viewMode === 'landing') return; // Landing page is accessible to all
+
+    // Check if user can access current view (pass activeModule for context)
+    const hasViewAccess = canAccessView(currentUser, viewMode, activeModule);
+
+    // Check if user can access current module
+    const hasModuleAccess = activeModule ? canAccessModule(currentUser, activeModule) : true;
+
+    // If user doesn't have access to either view or module, redirect
+    if (!hasViewAccess || !hasModuleAccess) {
+      console.warn(`[ACL Guard] Access denied to viewMode="${viewMode}" or module="${activeModule}"`);
+      console.warn(`[ACL Guard] User permissions:`, currentUser.allowedModules);
+      console.warn(`[ACL Guard] hasViewAccess=${hasViewAccess}, hasModuleAccess=${hasModuleAccess}`);
+
+      // Get first allowed module and redirect there
+      const allowedModule = getFirstAllowedModule(currentUser);
+      if (allowedModule) {
+        const allowedView = getDefaultViewFromPermissions(allowedModule);
+        console.log(`[ACL Guard] Redirecting to allowed module="${allowedModule}" view="${allowedView}"`);
+        setActiveModule(allowedModule);
+        setViewMode(allowedView);
+      } else {
+        // No modules allowed, redirect to profile (always accessible)
+        console.error('[ACL Guard] User has no allowed modules, redirecting to profile');
+        setViewMode('profile');
+      }
+    }
+  }, [currentUser, viewMode, activeModule, setActiveModule, setViewMode]);
 
   // Extract kioskProperty from kioskMode for backward compatibility
   const kioskProperty = kioskMode.propertyCode;
