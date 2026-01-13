@@ -5,7 +5,7 @@ import { X, Calendar, User, Clock, CheckCircle2, AlertTriangle, FileText, Shield
 interface TicketDetailModalProps {
  ticket: Ticket;
  onClose: () => void;
- onUpdateStatus: (id: string, status: TicketStatus, date?: string, startedAt?: number) => void;
+ onUpdateStatus: (id: string, status: TicketStatus, date?: string, startedAt?: number, completionReport?: Ticket['completionReport']) => void;
  onAssign: (id: string, assignee: string, date: string) => void;
  onAddExpense: (ticketId: string, description: string, amount: number) => void;
  onDeleteExpense: (ticketId: string, expenseId: string) => void;
@@ -33,6 +33,11 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
  const [expenseAmount, setExpenseAmount] = useState('');
  const [showExpenseForm, setShowExpenseForm] = useState(false);
 
+ // Task 38: Completion Report State (optional comment and attachment)
+ const [showCompletionReport, setShowCompletionReport] = useState(false);
+ const [completionNotes, setCompletionNotes] = useState('');
+ const [completionPhoto, setCompletionPhoto] = useState<string | null>(null);
+
  const renderStatusBadge = (status: TicketStatus) => {
   switch (status) {
    case TicketStatus.OPEN: return <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs md:text-sm font-semibold whitespace-nowrap">Aberto</span>;
@@ -59,10 +64,35 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
   onUpdateStatus(ticket.id, TicketStatus.IN_PROGRESS, undefined, Date.now());
  };
 
+ // Task 38: Handle file upload and convert to base64
+ const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (file) {
+   const reader = new FileReader();
+   reader.onloadend = () => {
+    setCompletionPhoto(reader.result as string);
+   };
+   reader.readAsDataURL(file);
+  }
+ };
+
  const handleCompletionSubmit = () => {
   if (completionDate) {
-   onUpdateStatus(ticket.id, TicketStatus.DONE, completionDate);
+   // Task 38: Build completion report if user added notes or photo
+   let completionReport = undefined;
+   if (completionNotes || completionPhoto) {
+    completionReport = {
+     condition: 'perfect' as const,
+     notes: completionNotes || undefined,
+     photos: completionPhoto ? [completionPhoto] : undefined,
+    };
+   }
+
+   onUpdateStatus(ticket.id, TicketStatus.DONE, completionDate, undefined, completionReport);
    setShowCompletionDate(false);
+   setShowCompletionReport(false);
+   setCompletionNotes('');
+   setCompletionPhoto(null);
   } else {
    alert("Informe a data de conclusão.");
   }
@@ -165,6 +195,39 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
       </div>
      </div>
 
+     {/* Task 38: Completion Report Display */}
+     {ticket.completionReport && (ticket.completionReport.notes || ticket.completionReport.photos) && (
+      <div>
+       <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Relatório de Conclusão</h3>
+       <div className="p-4 bg-green-50 rounded-lg border border-green-200 space-y-3">
+        {ticket.completionReport.notes && (
+         <div>
+          <p className="text-xs font-medium text-gray-600 mb-1">Comentário:</p>
+          <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+           {ticket.completionReport.notes}
+          </p>
+         </div>
+        )}
+        {ticket.completionReport.photos && ticket.completionReport.photos.length > 0 && (
+         <div>
+          <p className="text-xs font-medium text-gray-600 mb-2">Anexo:</p>
+          <div className="space-y-2">
+           {ticket.completionReport.photos.map((photo, idx) => (
+            <img
+             key={idx}
+             src={photo}
+             alt={`Anexo ${idx + 1}`}
+             className="max-w-full h-auto rounded border border-gray-200 cursor-pointer hover:opacity-90"
+             onClick={() => window.open(photo, '_blank')}
+            />
+           ))}
+          </div>
+         </div>
+        )}
+       </div>
+      </div>
+     )}
+
      {/* Metadata Grid */}
      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div className="space-y-4">
@@ -221,7 +284,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
         <div className="w-full">
          <div className="flex justify-between items-center mb-1">
           <p className="text-sm font-medium text-gray-900">Responsável Técnico</p>
-          {!assignMode && !isVirtualTicket && (
+          {!assignMode && (
            <button onClick={() => setAssignMode(true)} className="text-xs text-brand-600 hover:underline p-1">
             {ticket.assignee ? 'Alterar' : 'Atribuir'}
            </button>
@@ -267,7 +330,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
         <DollarSign size={16} /> Custos e Despesas
        </h3>
-       {!showExpenseForm && !isVirtualTicket && (
+       {!showExpenseForm && (
         <button
          onClick={() => setShowExpenseForm(true)}
          className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1 hover:bg-brand-50 px-2 py-1 rounded transition-colors"
@@ -387,7 +450,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
         </button>
 
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto justify-end">
-         {ticket.status !== TicketStatus.DONE && !isVirtualTicket && (
+         {ticket.status !== TicketStatus.DONE && (
           <button
            onClick={() => {
             if (ticket.status === TicketStatus.OPEN) {
@@ -406,7 +469,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
            )}
           </button>
          )}
-         {ticket.status === TicketStatus.DONE && !isVirtualTicket && (
+         {ticket.status === TicketStatus.DONE && (
           <button
            onClick={() => onUpdateStatus(ticket.id, TicketStatus.IN_PROGRESS)}
            className="px-6 py-3 md:py-2.5 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 w-full md:w-auto"
@@ -417,19 +480,74 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
         </div>
        </div>
       ) : (
-       <div className="bg-white border border-green-200 rounded-lg p-4 animate-fade-in">
-        <p className="text-sm font-semibold text-gray-800 mb-2">Confirme a data de conclusão:</p>
-        <div className="flex gap-3 flex-col md:flex-row">
-         <input 
-          type="datetime-local" 
+       <div className="bg-white border border-green-200 rounded-lg p-4 animate-fade-in space-y-4">
+        <div>
+         <p className="text-sm font-semibold text-gray-800 mb-2">Confirme a data de conclusão:</p>
+         <input
+          type="datetime-local"
           value={completionDate}
           onChange={(e) => setCompletionDate(e.target.value)}
-          className="flex-1 border border-gray-300 rounded p-2.5 text-sm"
+          className="w-full border border-gray-300 rounded p-2.5 text-sm"
          />
-         <div className="flex gap-2">
-          <button onClick={handleCompletionSubmit} className="flex-1 bg-green-600 text-white px-4 py-2.5 rounded text-sm font-medium">Confirmar</button>
-          <button onClick={() => setShowCompletionDate(false)} className="flex-1 bg-gray-100 text-gray-700 px-4 py-2.5 rounded text-sm font-medium">Cancelar</button>
+        </div>
+
+        {/* Task 38: Optional comment and attachment */}
+        {!showCompletionReport ? (
+         <button
+          onClick={() => setShowCompletionReport(true)}
+          className="text-sm text-blue-600 hover:text-blue-700 font-medium underline"
+         >
+          + Adicionar comentário ou anexo (opcional)
+         </button>
+        ) : (
+         <div className="space-y-3 pt-2 border-t border-gray-200">
+          <div>
+           <label className="block text-sm font-medium text-gray-700 mb-1">Comentário (opcional)</label>
+           <textarea
+            value={completionNotes}
+            onChange={(e) => setCompletionNotes(e.target.value)}
+            placeholder="Adicione observações sobre a conclusão do chamado..."
+            className="w-full border border-gray-300 rounded p-2.5 text-sm min-h-[80px] resize-none"
+           />
+          </div>
+          <div>
+           <label className="block text-sm font-medium text-gray-700 mb-1">Anexo (opcional)</label>
+           <input
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+           />
+           {completionPhoto && (
+            <p className="text-xs text-green-600 mt-1">✓ Foto anexada</p>
+           )}
+          </div>
+          <button
+           onClick={() => {
+            setShowCompletionReport(false);
+            setCompletionNotes('');
+            setCompletionPhoto(null);
+           }}
+           className="text-sm text-gray-600 hover:text-gray-700 font-medium"
+          >
+           Remover comentário e anexo
+          </button>
          </div>
+        )}
+
+        <div className="flex gap-2 pt-2">
+         <button onClick={handleCompletionSubmit} className="flex-1 bg-green-600 text-white px-4 py-2.5 rounded text-sm font-medium hover:bg-green-700">Confirmar</button>
+         <button
+          onClick={() => {
+           setShowCompletionDate(false);
+           setShowCompletionReport(false);
+           setCompletionNotes('');
+           setCompletionPhoto(null);
+          }}
+          className="flex-1 bg-gray-100 text-gray-700 px-4 py-2.5 rounded text-sm font-medium hover:bg-gray-200"
+         >
+          Cancelar
+         </button>
         </div>
        </div>
       )}

@@ -6,6 +6,7 @@ import {
  LogOut as LogOutIcon, Gem
 } from 'lucide-react';
 import type { User, AppModule, ViewMode } from '../../types';
+import { canAccessModule, canAccessView } from '../../utils/permissions';
 
 interface AppSidebarProps {
  currentUser: User;
@@ -61,14 +62,16 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
      <p className={`px-3 text-xs font-semibold text-gray-400 uppercase mb-2 ${!sidebarOpen && 'md:hidden'}`}>
       Módulo Principal
      </p>
-     <button
-      onClick={() => handleModuleClick('maintenance', 'cards')}
-      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeModule === 'maintenance' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
-     >
-      <Wrench size={20} />
-      {(sidebarOpen || mobileMenuOpen) && <span>Manutenção</span>}
-     </button>
-     {(!currentUser.allowedModules || currentUser.allowedModules.includes('concierge') || currentUser.role === 'Admin') && (
+     {canAccessModule(currentUser, 'maintenance') && (
+      <button
+       onClick={() => handleModuleClick('maintenance', 'cards')}
+       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeModule === 'maintenance' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+      >
+       <Wrench size={20} />
+       {(sidebarOpen || mobileMenuOpen) && <span>Manutenção</span>}
+      </button>
+     )}
+     {canAccessModule(currentUser, 'concierge') && (
       <button
        onClick={() => handleModuleClick('concierge', 'cards')}
        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeModule === 'concierge' ? 'bg-purple-50 text-purple-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
@@ -77,14 +80,16 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
        {(sidebarOpen || mobileMenuOpen) && <span>Concierge</span>}
       </button>
      )}
-     <button
-      onClick={() => handleModuleClick('guest', 'cards')}
-      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeModule === 'guest' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
-     >
-      <Shield size={20} />
-      {(sidebarOpen || mobileMenuOpen) && <span>Guest & CRM</span>}
-     </button>
-     {(!currentUser.allowedModules || currentUser.allowedModules.includes('reservations') || currentUser.role === 'Admin') && (
+     {canAccessModule(currentUser, 'guest') && (
+      <button
+       onClick={() => handleModuleClick('guest', 'cards')}
+       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeModule === 'guest' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+      >
+       <Shield size={20} />
+       {(sidebarOpen || mobileMenuOpen) && <span>Guest & CRM</span>}
+      </button>
+     )}
+     {canAccessModule(currentUser, 'reservations') && (
       <button
        onClick={() => handleModuleClick('reservations', 'general-calendar')}
        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeModule === 'reservations' ? 'bg-teal-50 text-teal-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
@@ -100,25 +105,37 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
      <p className={`px-3 text-xs font-semibold text-gray-400 uppercase mb-2 ${!sidebarOpen && 'md:hidden'}`}>
       Ferramentas
      </p>
-     <button onClick={() => handleViewClick('messages')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'messages' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <Inbox size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Mensagens</span>}
-     </button>
-     <button onClick={() => handleViewClick('boards')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'boards' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <Kanban size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Painéis & Fluxos</span>}
-     </button>
-     <button onClick={() => handleViewClick('guest-crm')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'guest-crm' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <Target size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>CRM & Ciclo</span>}
-     </button>
-     <button onClick={() => handleViewClick('properties')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'properties' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <Building2 size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Imóveis</span>}
-     </button>
-     <button onClick={() => handleViewClick('map')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'map' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <Map size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Mapa</span>}
-     </button>
-     <button onClick={() => handleViewClick('flights')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'flights' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <Plane size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Voos</span>}
-     </button>
-     {(!currentUser.allowedModules || currentUser.allowedModules.includes('inventory') || currentUser.role === 'Admin') && (
+     {canAccessView(currentUser, 'messages', activeModule) && (
+      <button onClick={() => handleViewClick('messages')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'messages' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+       <Inbox size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Mensagens</span>}
+      </button>
+     )}
+     {canAccessView(currentUser, 'boards', activeModule) && (
+      <button onClick={() => handleViewClick('boards')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'boards' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+       <Kanban size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Painéis & Fluxos</span>}
+      </button>
+     )}
+     {canAccessView(currentUser, 'guest-crm', activeModule) && (
+      <button onClick={() => handleViewClick('guest-crm')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'guest-crm' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+       <Target size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>CRM & Ciclo</span>}
+      </button>
+     )}
+     {canAccessView(currentUser, 'properties', activeModule) && (
+      <button onClick={() => handleViewClick('properties')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'properties' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+       <Building2 size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Imóveis</span>}
+      </button>
+     )}
+     {canAccessView(currentUser, 'map', activeModule) && (
+      <button onClick={() => handleViewClick('map')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'map' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+       <Map size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Mapa</span>}
+      </button>
+     )}
+     {canAccessView(currentUser, 'flights', activeModule) && (
+      <button onClick={() => handleViewClick('flights')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'flights' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+       <Plane size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Voos</span>}
+      </button>
+     )}
+     {canAccessModule(currentUser, 'inventory') && (
       <button
        onClick={() => handleModuleClick('inventory', 'inventory')}
        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'inventory' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}
@@ -127,7 +144,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
        {(sidebarOpen || mobileMenuOpen) && <span>Inventário</span>}
       </button>
      )}
-     {(!currentUser.allowedModules || currentUser.allowedModules.includes('office') || currentUser.role === 'Admin') && (
+     {canAccessModule(currentUser, 'office') && (
       <button
        onClick={() => handleModuleClick('office', 'office')}
        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'office' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}
@@ -136,41 +153,59 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
        {(sidebarOpen || mobileMenuOpen) && <span>Escritório</span>}
       </button>
      )}
-     <button onClick={() => handleViewClick('stats')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'stats' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <PieChart size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Estatísticas</span>}
-     </button>
-     <button onClick={() => handleViewClick('reports')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'reports' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <FileText size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Relatórios</span>}
-     </button>
-     <button onClick={() => handleViewClick('cms')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'cms' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <BookOpen size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>CMS Tablet</span>}
-     </button>
-     <button onClick={() => handleViewClick('concierge-cms')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'concierge-cms' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <Tag size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Gestão Ofertas</span>}
-     </button>
-     <button onClick={() => handleViewClick('feedbacks')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'feedbacks' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <MessageSquare size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Avaliações</span>}
-     </button>
+     {canAccessView(currentUser, 'stats', activeModule) && (
+      <button onClick={() => handleViewClick('stats')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'stats' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+       <PieChart size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Estatísticas</span>}
+      </button>
+     )}
+     {canAccessView(currentUser, 'reports', activeModule) && (
+      <button onClick={() => handleViewClick('reports')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'reports' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+       <FileText size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Relatórios</span>}
+      </button>
+     )}
+     {canAccessView(currentUser, 'cms', activeModule) && (
+      <button onClick={() => handleViewClick('cms')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'cms' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+       <BookOpen size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>CMS Tablet</span>}
+      </button>
+     )}
+     {canAccessView(currentUser, 'concierge-cms', activeModule) && (
+      <button onClick={() => handleViewClick('concierge-cms')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'concierge-cms' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+       <Tag size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Gestão Ofertas</span>}
+      </button>
+     )}
+     {canAccessView(currentUser, 'feedbacks', activeModule) && (
+      <button onClick={() => handleViewClick('feedbacks')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'feedbacks' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+       <MessageSquare size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Avaliações</span>}
+      </button>
+     )}
     </div>
 
     {/* Admin / Management */}
-    {(currentUser.role === 'Admin' || currentUser.allowedModules?.includes('management')) && (
+    {canAccessModule(currentUser, 'management') && (
      <div>
       <p className={`px-3 text-xs font-semibold text-gray-400 uppercase mb-2 ${!sidebarOpen && 'md:hidden'}`}>
        Gestão
       </p>
-      <button onClick={() => handleViewClick('financial')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'financial' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
-       <DollarSign size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Financeiro</span>}
-      </button>
-      <button onClick={() => handleViewClick('admin')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'admin' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-       <Shield size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Acessos</span>}
-      </button>
-      <button onClick={() => handleViewClick('logs')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'logs' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-       <ScrollText size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Logs</span>}
-      </button>
-      <button onClick={() => handleViewClick('settings')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'settings' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
-       <Settings size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Configurações</span>}
-      </button>
+      {canAccessView(currentUser, 'financial', activeModule) && (
+       <button onClick={() => handleViewClick('financial')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'financial' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+        <DollarSign size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Financeiro</span>}
+       </button>
+      )}
+      {canAccessView(currentUser, 'admin', activeModule) && (
+       <button onClick={() => handleViewClick('admin')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'admin' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+        <Shield size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Acessos</span>}
+       </button>
+      )}
+      {canAccessView(currentUser, 'logs', activeModule) && (
+       <button onClick={() => handleViewClick('logs')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'logs' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+        <ScrollText size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Logs</span>}
+       </button>
+      )}
+      {canAccessView(currentUser, 'settings', activeModule) && (
+       <button onClick={() => handleViewClick('settings')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${viewMode === 'settings' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+        <Settings size={20} /> {(sidebarOpen || mobileMenuOpen) && <span>Configurações</span>}
+       </button>
+      )}
      </div>
     )}
    </nav>

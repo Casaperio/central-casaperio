@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Reservation, ReservationStatus, User, FlightData, Ticket } from '../types';
 import { X, Calendar, User as UserIcon, ChevronLeft, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby, Repeat, MessageSquare } from 'lucide-react';
 import { checkFlightStatus } from '../services/geminiService';
 import { storageService } from '../services/storage';
+import { getReservationOverrideKey } from '../utils';
 
 interface ReservationDetailModalProps {
  reservation: Reservation;
@@ -73,6 +75,9 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  const [hasChanges, setHasChanges] = useState(false);
  const [showLangSuggestions, setShowLangSuggestions] = useState(false);
 
+ // React Query Client (para invalidar cache dos cards após salvar)
+ const queryClient = useQueryClient();
+
  // Flight Status State
  const [flightData, setFlightData] = useState<FlightData | undefined>(reservation.flightData);
  const [loadingFlight, setLoadingFlight] = useState(false);
@@ -92,6 +97,10 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  const [loadingOverrides, setLoadingOverrides] = useState(true);
  const [savingOverrides, setSavingOverrides] = useState(false);
  const [isInitializing, setIsInitializing] = useState(true);
+ 
+ // Task 41: Maintenance seen state
+ const [maintenanceSeenBy, setMaintenanceSeenBy] = useState<string | undefined>(reservation.maintenanceAck?.seenBy);
+ const [maintenanceSeenAt, setMaintenanceSeenAt] = useState<number | undefined>(reservation.maintenanceAck?.seenAt);
 
  // Baseline para comparação de dirty state (snapshot inicial após merge de overrides)
  const initialEditableRef = useRef<string | null>(null);
@@ -157,15 +166,22 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
    const loadOverrides = async () => {
      setIsInitializing(true); // Marca que está inicializando
      baselineSetRef.current = false; // Reseta flag de baseline
-     const reservationId = reservation.id || reservation.externalId;
-     if (!reservationId) {
-       setLoadingOverrides(false);
-       setIsInitializing(false);
-       return;
-     }
 
      try {
-       const overrides = await storageService.reservationOverrides.get(reservationId);
+       // CRÍTICO: Usar getReservationOverrideKey para gerar a chave correta
+       const overrideKey = getReservationOverrideKey(reservation);
+
+       console.log('[Modal] Carregando overrides:', {
+         INPUT_reservation_id: reservation.id,
+         INPUT_reservation_externalId: reservation.externalId,
+         INPUT_reservation_source: reservation.source,
+         CHAVE_CALCULADA: overrideKey
+       });
+
+       const overrides = await storageService.reservationOverrides.get(overrideKey);
+
+       console.log('[Modal] Override carregado:', overrides ? 'SIM' : 'NÃO', overrides);
+
        if (overrides) {
          // Merge overrides com o estado atual
          if (overrides.language !== undefined) setLanguage(overrides.language);
@@ -188,9 +204,12 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
            setLateTime(overrides.lateCheckOut.time);
            setLateGranted(overrides.lateCheckOut.granted);
          }
+         // Task 41: Load maintenance seen status
+         if (overrides.maintenanceSeenBy !== undefined) setMaintenanceSeenBy(overrides.maintenanceSeenBy);
+         if (overrides.maintenanceSeenAt !== undefined) setMaintenanceSeenAt(overrides.maintenanceSeenAt);
        }
      } catch (error) {
-       console.error('Erro ao carregar overrides da reserva:', error);
+       console.error('[Modal] Erro ao carregar overrides da reserva:', error);
      } finally {
        setLoadingOverrides(false);
        // Aguarda um tick para garantir que todos os setStates foram processados
@@ -199,7 +218,7 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
    };
 
    loadOverrides();
- }, [reservation.id, reservation.externalId]);
+ }, [reservation.id, reservation.externalId, reservation.source, reservation.guestName]);
 
  // Seta o baseline inicial após carregar overrides (para comparação de dirty state)
  useEffect(() => {
@@ -299,9 +318,24 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  const handleSaveChanges = async () => {
    setSavingOverrides(true);
    try {
+     const overrideKey = getReservationOverrideKey(reservation);
+
+     console.log('[Modal] Salvando overrides:', {
+       INPUT_reservation_id: reservation.id,
+       INPUT_reservation_externalId: reservation.externalId,
+       INPUT_reservation_source: reservation.source,
+       CHAVE_CALCULADA: overrideKey,
+       propertyCode: reservation.propertyCode,
+       docsSent,
+       docsSentToBuilding,
+       hasChildren,
+       maintenanceSeenAt
+     });
+
      await storageService.reservationOverrides.set({
        reservationId: reservation.id,
        externalId: reservation.externalId,
+       source: reservation.source, // CRÍTICO: incluir source
        propertyCode: reservation.propertyCode,
        guestName: reservation.guestName,
        language,
@@ -316,9 +350,16 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
        notes,
        specialAttention,
        problemReported,
+       // Task 41: Save maintenance seen status
+       maintenanceSeenBy,
+       maintenanceSeenAt,
        updatedAt: Date.now(),
        updatedBy: currentUser.name
      });
+
+     // Invalidar cache do GuestView para atualizar as tags dos cards
+     queryClient.invalidateQueries({ queryKey: ['guest-view-overrides'] });
+     queryClient.invalidateQueries({ queryKey: ['reservation-overrides'] });
 
      // Atualiza o baseline para o novo estado salvo
      const newBaseline = JSON.stringify(getEditableFields());
@@ -351,12 +392,69 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
    setLoadingFlight(false);
  };
 
- const handleMaintenanceAck = () => {
+ const handleMaintenanceAck = async () => {
+   // Task 41: Save to Firestore instead of just updating local state
+   const seenBy = currentUser.name;
+   const seenAt = Date.now();
+
+   setMaintenanceSeenBy(seenBy);
+   setMaintenanceSeenAt(seenAt);
+
+   // Save to Firestore
+   setSavingOverrides(true);
+   try {
+     const overrideKey = getReservationOverrideKey(reservation);
+
+     console.log('[Modal] Marcando como visto:', {
+       INPUT_reservation_id: reservation.id,
+       INPUT_reservation_externalId: reservation.externalId,
+       INPUT_reservation_source: reservation.source,
+       CHAVE_CALCULADA: overrideKey,
+       propertyCode: reservation.propertyCode,
+       maintenanceSeenAt: seenAt,
+       maintenanceSeenBy: seenBy
+     });
+
+     await storageService.reservationOverrides.set({
+       reservationId: reservation.id,
+       externalId: reservation.externalId,
+       source: reservation.source, // CRÍTICO: incluir source
+       propertyCode: reservation.propertyCode,
+       guestName: reservation.guestName,
+       language,
+       docsSent,
+       docsSentToBuilding,
+       hasChildren,
+       wantsBedSplit,
+       earlyCheckIn: { requested: earlyRequest, time: earlyTime, granted: earlyGranted },
+       lateCheckOut: { requested: lateRequest, time: lateTime, granted: lateGranted },
+       flightInfo,
+       roomConfig,
+       notes,
+       specialAttention,
+       problemReported,
+       maintenanceSeenBy: seenBy,
+       maintenanceSeenAt: seenAt,
+       updatedAt: Date.now(),
+       updatedBy: currentUser.name
+     });
+
+     // Invalidar cache do GuestView para atualizar as tags dos cards
+     queryClient.invalidateQueries({ queryKey: ['guest-view-overrides'] });
+     queryClient.invalidateQueries({ queryKey: ['reservation-overrides'] });
+   } catch (error) {
+     console.error('Erro ao salvar status de manutenção:', error);
+     alert('Erro ao salvar. Tente novamente.');
+   } finally {
+     setSavingOverrides(false);
+   }
+
+   // Also update the reservation object (for backward compatibility)
    onUpdateDetails(reservation.id, {
      maintenanceAck: {
        seen: true,
-       seenBy: currentUser.name,
-       seenAt: Date.now()
+       seenBy,
+       seenAt
      }
    });
  };
@@ -710,12 +808,12 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
                  <div>
                    <h4 className="font-bold text-gray-800 text-sm">Status Manutenção</h4>
                    <p className="text-xs text-gray-500">
-                     {reservation.maintenanceAck?.seen 
-                      ? `Visto por ${reservation.maintenanceAck.seenBy?.split(' ')[0]} em ${new Date(reservation.maintenanceAck.seenAt!).toLocaleDateString()}` 
+                     {maintenanceSeenAt 
+                      ? `Visto por ${maintenanceSeenBy?.split(' ')[0]} em ${new Date(maintenanceSeenAt).toLocaleDateString()}` 
                       : 'Ainda não visualizado ou possui alterações recentes.'}
                    </p>
                  </div>
-                 {!reservation.maintenanceAck?.seen ? (
+                 {!maintenanceSeenAt ? (
                    <button 
                     onClick={handleMaintenanceAck}
                     className="bg-gray-800 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-900 transition-colors flex items-center gap-2"

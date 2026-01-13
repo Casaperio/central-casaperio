@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   CalendarClock, CalendarRange, LogIn, LogOut as LogOutIcon, Home, Languages,
-  FileX, EyeOff, DollarSign, Wrench, Repeat
+  FileX, EyeOff, DollarSign, Wrench, Repeat, FileCheck, CheckCircle2, AlertCircle, Baby
 } from 'lucide-react';
 import { Reservation, Ticket } from '../../types';
 import { AgendaGroup } from '../../services/staysDataMapper';
@@ -9,6 +10,8 @@ import { SkeletonAgenda, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import PeriodFilter, { PeriodPreset } from './PeriodFilter';
 import { useGuestPeriodFilter } from '../../hooks/features/useGuestPeriodFilter';
+import { storageService } from '../../services/storage';
+import { getReservationOverrideKey } from '../../utils';
 
 interface GuestViewProps {
   staysReservations: Reservation[];
@@ -70,6 +73,55 @@ export const GuestView: React.FC<GuestViewProps> = ({
     customEndDate: guestCustomEndDate,
     searchTerm,
   });
+
+  // Task 40-43: Carregar overrides em lote para mostrar tags nos cards
+  const reservationKeys = useMemo(() => {
+    return staysReservations.map(res => {
+      try {
+        return getReservationOverrideKey(res);
+      } catch (error) {
+        console.error('[GuestView] Erro ao gerar override key:', res, error);
+        return null;
+      }
+    }).filter(Boolean) as string[];
+  }, [staysReservations]);
+
+  const { data: overridesMap = new Map() } = useQuery({
+    queryKey: ['guest-view-overrides', reservationKeys.join(',')],
+    queryFn: async () => {
+      if (reservationKeys.length === 0) return new Map();
+
+      console.log('[GuestView] Carregando overrides em lote:', reservationKeys.length, 'reservas');
+      const map = await storageService.reservationOverrides.getMultiple(reservationKeys);
+      console.log('[GuestView] Overrides carregados:', map.size, 'encontrados');
+      return map;
+    },
+    staleTime: 30 * 1000, // 30 segundos
+    enabled: reservationKeys.length > 0,
+  });
+
+  // Helper: Merge reservation + override
+  const getMergedReservation = (reservation: Reservation) => {
+    const overrideKey = getReservationOverrideKey(reservation);
+    const override = overridesMap.get(overrideKey);
+
+    if (!override) return reservation;
+
+    // Merge: overrides têm prioridade
+    return {
+      ...reservation,
+      docsSent: override.docsSent ?? reservation.docsSent,
+      docsSentToBuilding: override.docsSentToBuilding ?? reservation.docsSentToBuilding,
+      hasChildren: override.hasChildren ?? reservation.hasBabies,
+      earlyCheckIn: override.earlyCheckIn ?? reservation.earlyCheckIn,
+      lateCheckOut: override.lateCheckOut ?? reservation.lateCheckOut,
+      maintenanceAck: {
+        seen: !!override.maintenanceSeenAt,
+        seenAt: override.maintenanceSeenAt,
+        seenBy: override.maintenanceSeenBy,
+      },
+    };
+  };
 
   // Calcula quantas reservas cada hóspede já fez
   const guestReservationCount = React.useMemo(() => {
@@ -151,6 +203,24 @@ export const GuestView: React.FC<GuestViewProps> = ({
                     const dailyStatus = reservation.dailyStatus;
                     const reservationCount = guestReservationCount.get(normalizeGuestName(reservation.guestName)) || 0;
 
+                    // Task 40-43: Merge com overrides do Firestore
+                    const merged = getMergedReservation(reservation);
+
+                    // Task 40: Check docs status
+                    const docsSent = merged.docsSent ?? false;
+                    const docsSentToBuilding = merged.docsSentToBuilding ?? false;
+                    const docsComplete = docsSent && docsSentToBuilding;
+
+                    // Task 41: Check maintenance status
+                    const maintenanceSeen = merged.maintenanceAck?.seen ?? false;
+
+                    // Task 42: Check Early/Late Check-in/out
+                    const earlyCheckIn = merged.earlyCheckIn;
+                    const lateCheckOut = merged.lateCheckOut;
+
+                    // Task 43: Check if has children
+                    const hasChildren = merged.hasChildren ?? false;
+
                     return (
                       <div
                         key={reservation.id}
@@ -185,16 +255,54 @@ export const GuestView: React.FC<GuestViewProps> = ({
                         </div>
 
                         <div className="flex flex-wrap gap-1 mb-2">
-                          {!reservation.docsSent && (
-                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-700 text-[9px] font-bold rounded">
+                          {/* Task 40: Docs indicator */}
+                          {!docsComplete && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-700 text-[9px] font-bold rounded uppercase">
                               <FileX size={10} /> DOCS
                             </span>
                           )}
-                          {!reservation.maintenanceAck?.seen && (
-                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 text-[9px] font-bold rounded">
+                          {docsComplete && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 text-[9px] font-bold rounded uppercase">
+                              <FileCheck size={10} /> Docs OK
+                            </span>
+                          )}
+
+                          {/* Task 41: Maintenance seen indicator */}
+                          {!maintenanceSeen && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-[9px] font-bold rounded uppercase">
                               <EyeOff size={10} /> NÃO VISTO
                             </span>
                           )}
+                          {maintenanceSeen && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 text-[9px] font-bold rounded uppercase">
+                              <CheckCircle2 size={10} /> Ciente
+                            </span>
+                          )}
+
+                          {/* Task 42: Early Check-in / Late Check-out indicators */}
+                          {earlyCheckIn?.requested && (
+                            <span className={`flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded uppercase ${
+                              earlyCheckIn.granted ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              <LogIn size={10} /> Early {earlyCheckIn.time}
+                            </span>
+                          )}
+                          {lateCheckOut?.requested && (
+                            <span className={`flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded uppercase ${
+                              lateCheckOut.granted ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              <LogOutIcon size={10} /> Late {lateCheckOut.time}
+                            </span>
+                          )}
+
+                          {/* Task 43: Has children indicator */}
+                          {hasChildren && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-pink-100 text-pink-700 text-[9px] font-bold rounded" title="Possui Criança">
+                              <Baby size={10} />
+                            </span>
+                          )}
+
+                          {/* Existing indicators */}
                           {reservation.expenses && reservation.expenses.length > 0 && (
                             <span className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-[9px] font-bold rounded">
                               <DollarSign size={10} /> R$ {reservation.expenses.reduce((sum, exp) => sum + exp.amount, 0).toFixed(0)}
@@ -267,6 +375,16 @@ export const GuestView: React.FC<GuestViewProps> = ({
                 const dailyStatus = reservation.dailyStatus;
                 const reservationCount = guestReservationCount.get(normalizeGuestName(reservation.guestName)) || 0;
 
+                // Task 40-43: Merge com overrides do Firestore
+                const merged = getMergedReservation(reservation);
+                const docsSent = merged.docsSent ?? false;
+                const docsSentToBuilding = merged.docsSentToBuilding ?? false;
+                const docsComplete = docsSent && docsSentToBuilding;
+                const maintenanceSeen = merged.maintenanceAck?.seen ?? false;
+                const earlyCheckIn = merged.earlyCheckIn;
+                const lateCheckOut = merged.lateCheckOut;
+                const hasChildren = merged.hasChildren ?? false;
+
                 return (
                   <div
                     key={reservation.id}
@@ -297,8 +415,30 @@ export const GuestView: React.FC<GuestViewProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1 flex-wrap">
-                        {!reservation.docsSent && <div title="Documentação pendente"><FileX size={12} className="text-red-500" /></div>}
-                        {!reservation.maintenanceAck?.seen && <div title="Manutenção não vista"><EyeOff size={12} className="text-orange-500" /></div>}
+                        {/* Task 40: Docs indicator */}
+                        {!docsComplete && <div title="Documentação pendente"><FileX size={12} className="text-red-500" /></div>}
+                        {docsComplete && <div title="Documentos completos"><FileCheck size={12} className="text-green-500" /></div>}
+
+                        {/* Task 41: Maintenance indicator */}
+                        {!maintenanceSeen && <div title="Manutenção não vista"><AlertCircle size={12} className="text-yellow-500" /></div>}
+                        {maintenanceSeen && <div title="Manutenção ciente"><CheckCircle2 size={12} className="text-green-500" /></div>}
+
+                        {/* Task 42: Early/Late Check */}
+                        {earlyCheckIn?.requested && (
+                          <div title={`Early Check-in ${earlyCheckIn.time} ${earlyCheckIn.granted ? '(concedido)' : '(solicitado)'}`}>
+                            <LogIn size={12} className={earlyCheckIn.granted ? 'text-green-500' : 'text-orange-500'} />
+                          </div>
+                        )}
+                        {lateCheckOut?.requested && (
+                          <div title={`Late Check-out ${lateCheckOut.time} ${lateCheckOut.granted ? '(concedido)' : '(solicitado)'}`}>
+                            <LogOutIcon size={12} className={lateCheckOut.granted ? 'text-green-500' : 'text-orange-500'} />
+                          </div>
+                        )}
+
+                        {/* Task 43: Has children */}
+                        {hasChildren && <div title="Possui criança"><Baby size={12} className="text-pink-500" /></div>}
+
+                        {/* Existing indicators */}
                         {reservation.expenses && reservation.expenses.length > 0 && <div title={`R$ ${reservation.expenses.reduce((sum, exp) => sum + exp.amount, 0).toFixed(0)} em despesas`}><DollarSign size={12} className="text-yellow-500" /></div>}
                         {reservation.language && <span className="text-[10px] text-blue-600 font-semibold uppercase" title={`Idioma: ${reservation.language}`}>{reservation.language}</span>}
                         {reservationCount > 0 && (

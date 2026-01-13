@@ -46,7 +46,7 @@ export const toDateKey = (date: Date | string): string => {
  * Sanitiza string para uso como document ID no Firestore
  * Remove caracteres que causam problemas: / | espaços
  */
-function sanitizeFirestoreKey(str: string): string {
+export function sanitizeFirestoreKey(str: string): string {
   return str
     .replace(/\//g, '-')  // Substitui / por -
     .replace(/\|/g, '-')  // Substitui | por -
@@ -201,6 +201,38 @@ export const toDateOnly = (value: any): string => {
   const day = String(date.getDate()).padStart(2, '0');
 
   return `${year}-${month}-${day}`;
+};
+
+/**
+ * Retorna a chave única para acessar os overrides de uma reserva no Firestore
+ * CRÍTICO: Para reservas da API Stays (source === 'Stays'), SEMPRE usar externalId (bookingId)
+ * porque o id é gerado dinamicamente e não é estável entre carregamentos
+ * IMPORTANTE: Esta função DEVE ser usada em todos os lugares que acessam overrides
+ */
+export const getReservationOverrideKey = (reservation: any): string => {
+  // REGRA CRÍTICA: Para reservas da API Stays, SEMPRE usar externalId (bookingId)
+  // porque é o único identificador estável
+  if (reservation.source === 'Stays' && reservation.externalId) {
+    return sanitizeFirestoreKey(reservation.externalId);
+  }
+
+  // Para outras fontes: Prioridade 1: usar reservation.id (preferencial)
+  if (reservation.id && reservation.source !== 'Stays') {
+    return sanitizeFirestoreKey(reservation.id);
+  }
+
+  // Fallback: usar externalId se id não existir
+  if (reservation.externalId) {
+    return sanitizeFirestoreKey(reservation.externalId);
+  }
+
+  // Último fallback: usar id mesmo se for de Stays (não deveria chegar aqui)
+  if (reservation.id) {
+    return sanitizeFirestoreKey(reservation.id);
+  }
+
+  // Se nenhum dos dois existe, lançar erro (não deveria acontecer)
+  throw new Error('Reserva sem id ou externalId - impossível gerar chave de override');
 };
 
 /**

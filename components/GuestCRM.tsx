@@ -1,20 +1,23 @@
 
 import React, { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Reservation, Ticket, GuestFeedback, ReservationStatus } from '../types';
 import {
  User, Search, Calendar, Moon, DollarSign, Star,
  History, TrendingUp, MapPin, Wrench, MessageSquare,
  Crown, Clock, ChevronRight, Phone, Mail, Filter, ArrowUpDown,
- LogIn, LogOut, Home, X
+ LogIn, LogOut, Home, X, FileCheck, CheckCircle2, Baby, AlertCircle
 } from 'lucide-react';
 import { formatCurrency } from '../utils';
 import { getDetailedFinancials, getCalendar } from '../services/staysApiService';
+import { storageService } from '../services/storage';
+import ReservationDetailModal from './ReservationDetailModal';
 
 interface GuestCRMProps {
  reservations: Reservation[];
  tickets: Ticket[];
  feedbacks: GuestFeedback[];
+ currentUser?: { role: string; name: string }; // Add currentUser for role-based visibility
 }
 
 interface ConsolidatedGuest {
@@ -65,15 +68,20 @@ const formatPhoneBR = (phone: string): string => {
   return phone;
 };
 
-const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks }) => {
+const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, currentUser = { role: '', name: '' } }) => {
+ const queryClient = useQueryClient();
  const [searchTerm, setSearchTerm] = useState('');
  const [selectedGuestName, setSelectedGuestName] = useState<string | null>(null);
+ const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
 
  // Filter States
  const [filterStatus, setFilterStatus] = useState<'all' | 'checkin' | 'checkout' | 'inhouse'>('all');
  const [sortBy, setSortBy] = useState<'spend' | 'recent' | 'oldest' | 'nights' | 'bookings'>('spend');
  const [dateFrom, setDateFrom] = useState('');
  const [dateTo, setDateTo] = useState('');
+ 
+ // Force refetch overrides (used to refresh after changes)
+ const [refetchTrigger, setRefetchTrigger] = useState(0);
 
  // Fetch financial data from Stays API
  const { data: financialData } = useQuery({
@@ -94,6 +102,32 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks })
     return getCalendar(from, to);
   },
   staleTime: 10 * 60 * 1000, // 10 minutes
+ });
+ 
+ // Fetch overrides for all reservations to show indicators
+ const { data: reservationOverrides = {}, refetch: refetchOverrides } = useQuery({
+  queryKey: ['reservation-overrides', reservations.map(r => r.id || r.externalId).join(','), refetchTrigger],
+  queryFn: async () => {
+    const overridesMap: Record<string, any> = {};
+    for (const res of reservations) {
+      const resId = res.id || res.externalId;
+      if (resId) {
+        try {
+          console.log('Fetching override for resId:', resId);
+          const override = await storageService.reservationOverrides.get(resId);
+          console.log('Override result:', override);
+          if (override) {
+            overridesMap[resId] = override;
+          }
+        } catch (error) {
+          console.error(`Error loading override for ${resId}:`, error);
+        }
+      }
+    }
+    console.log('Final overridesMap:', overridesMap);
+    return overridesMap;
+  },
+  staleTime: 30 * 1000, // 30 seconds (reduced for faster updates)
  });
 
  // Create map of bookingId -> reserveTotal for quick lookup
@@ -560,18 +594,107 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks })
                     const isFuture = new Date(res.checkInDate).getTime() > Date.now();
                     const isCurrent = new Date(res.checkInDate).getTime() <= Date.now() && new Date(res.checkOutDate).getTime() >= Date.now();
                     
+                    // Get overrides for this reservation
+                    const resId = res.id || res.externalId || '';
+                    const override = reservationOverrides[resId];
+                    
+                    // DEBUG
+                    console.log('=== RESERVATION CARD DEBUG ===');
+                    console.log('resId:', resId);
+                    console.log('override:', override);
+                    console.log('all overrides:', reservationOverrides);
+                    
+                    // Task 40: Check if docs are complete
+                    const docsSent = override?.docsSent ?? res.docsSent ?? false;
+                    const docsSentToBuilding = override?.docsSentToBuilding ?? res.docsSentToBuilding ?? false;
+                    const docsComplete = docsSent && docsSentToBuilding;
+                    
+                    console.log('docsSent:', docsSent, 'docsSentToBuilding:', docsSentToBuilding, 'docsComplete:', docsComplete);
+                    
+                    // Task 41: Check maintenance status
+                    const maintenanceSeen = override?.maintenanceSeenAt || res.maintenanceAck?.seenAt;
+                    
+                    // Task 42: Check Early/Late Check-in/out
+                    const earlyCheckIn = override?.earlyCheckIn ?? res.earlyCheckIn;
+                    const lateCheckOut = override?.lateCheckOut ?? res.lateCheckOut;
+                    
+                    // Task 43: Check if has children
+                    const hasChildren = override?.hasChildren ?? res.hasChildren ?? false;
+                    
+                    console.log('hasChildren:', hasChildren);
+                    console.log('==============================');
+                    
                     return (
-                      <div key={res.id} className={`p-4 flex flex-col md:flex-row md:items-center justify-between hover:bg-gray-50 transition-colors ${isCurrent ? 'bg-blue-50/50' : ''}`}>
-                        <div className="flex items-start gap-3">
+                      <div 
+                        key={res.id} 
+                        onClick={() => setSelectedReservation(res)}
+                        className={`p-4 flex flex-col md:flex-row md:items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer ${isCurrent ? 'bg-blue-50/50' : ''}`}
+                      >
+                        <div className="flex items-start gap-3 flex-1">
                           <div className={`mt-1 w-2 h-2 rounded-full ${isFuture ? 'bg-green-500' : isCurrent ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
-                          <div>
-                            <p className="text-sm font-bold text-gray-900">{res.propertyCode}</p>
-                            <p className="text-xs text-gray-500">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-bold text-gray-900">{res.propertyCode}</p>
+                              
+                              {/* Task 40: Docs indicator */}
+                              {!docsComplete && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-red-100 text-red-700 rounded uppercase font-bold">
+                                  DOCS
+                                </span>
+                              )}
+                              {docsComplete && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded uppercase font-bold flex items-center gap-0.5">
+                                  <FileCheck size={10} /> Docs OK
+                                </span>
+                              )}
+                              
+                              {/* Task 41: Maintenance seen indicator */}
+                              {!maintenanceSeen && currentUser.role !== 'Guest Relations' && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded uppercase font-bold flex items-center gap-0.5">
+                                  <AlertCircle size={10} /> NÃO VISTO
+                                </span>
+                              )}
+                              {maintenanceSeen && currentUser.role !== 'Guest Relations' && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded uppercase font-bold flex items-center gap-0.5">
+                                  <CheckCircle2 size={10} /> Ciente
+                                </span>
+                              )}
+                              
+                              {/* Task 43: Has children indicator */}
+                              {hasChildren && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded flex items-center gap-0.5" title="Possui Criança">
+                                  <Baby size={10} />
+                                </span>
+                              )}
+                            </div>
+                            
+                            <p className="text-xs text-gray-500 mt-0.5">
                               {new Date(res.checkInDate).toLocaleDateString()} - {new Date(res.checkOutDate).toLocaleDateString()}
                             </p>
-                            <p className="flex items-center gap-1 mt-1 text-xs text-gray-400">
-                              <MapPin size={10} /> {res.propertyName || 'Imóvel Casapē'}
-                            </p>
+                            
+                            {/* Task 42: Early Check-in / Late Check-out indicators */}
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              {earlyCheckIn?.requested && (
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-bold ${
+                                  earlyCheckIn.granted ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                                }`}>
+                                  <LogIn size={10} className="inline mr-0.5" />
+                                  Early {earlyCheckIn.time}
+                                </span>
+                              )}
+                              {lateCheckOut?.requested && (
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-bold ${
+                                  lateCheckOut.granted ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                                }`}>
+                                  <LogOut size={10} className="inline mr-0.5" />
+                                  Late {lateCheckOut.time}
+                                </span>
+                              )}
+                              
+                              <p className="flex items-center gap-1 text-xs text-gray-400">
+                                <MapPin size={10} /> {res.propertyName || 'Imóvel Casapē'}
+                              </p>
+                            </div>
                           </div>
                         </div>
                         <div className="mt-2 text-right md:mt-0">
@@ -694,6 +817,27 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks })
       </div>
      )}
    </div>
+   
+   {/* Reservation Detail Modal */}
+   {selectedReservation && (
+     <ReservationDetailModal
+       reservation={selectedReservation}
+       currentUser={currentUser as any}
+       tickets={tickets.filter(t => t.reservationId === selectedReservation.id || t.propertyCode === selectedReservation.propertyCode)}
+       staysReservations={reservations}
+       onCreateTicket={() => {}}
+       onClose={() => {
+         setSelectedReservation(null);
+         // Force invalidate and refetch overrides after modal closes
+         queryClient.invalidateQueries({ queryKey: ['reservation-overrides'] });
+         setRefetchTrigger(prev => prev + 1);
+       }}
+       onUpdateDetails={() => {}}
+       onDelete={() => {}}
+       onAddExpense={() => {}}
+       onDeleteExpense={() => {}}
+     />
+   )}
   </div>
  );
 };

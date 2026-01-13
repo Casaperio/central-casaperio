@@ -8,6 +8,7 @@ import {
   Board, BoardColumn, BoardCard, AfterHoursConfig, ChatMessage, CallSession
 } from '../types';
 import { MOCK_PROPERTIES, PRIORITIES, SERVICE_TYPES, MOCK_USERS } from '../constants';
+import { getReservationOverrideKey } from '../utils';
 
 // Nome das coleções no Firestore
 const COLLECTIONS = {
@@ -287,26 +288,111 @@ export const storageService = {
 
   // --- RESERVATION OVERRIDES ---
   reservationOverrides: {
+    /**
+     * ⚠️ FUNÇÃO DE LIMPEZA - USA COM CUIDADO!
+     * Deleta TODOS os overrides de reservas do Firestore
+     */
+    clearAll: async (): Promise<number> => {
+      ensureDb();
+      console.log('[Storage] 🗑️  Iniciando limpeza de reservation_overrides...');
+
+      const snapshot = await db.collection(COLLECTIONS.RESERVATION_OVERRIDES).get();
+      const count = snapshot.size;
+
+      console.log(`[Storage] 📊 Encontrados ${count} documentos para deletar`);
+
+      if (count === 0) {
+        console.log('[Storage] ✅ Nenhum documento encontrado. Coleção já está limpa!');
+        return 0;
+      }
+
+      // Deletar em batch
+      const batch = db.batch();
+      snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+
+      console.log(`[Storage] ✅ Limpeza concluída! ${count} documento(s) deletado(s)`);
+      return count;
+    },
+
     get: async (reservationId: string): Promise<ReservationOverrides | null> => {
       ensureDb();
       const docRef = db.collection(COLLECTIONS.RESERVATION_OVERRIDES).doc(sanitizeDocId(reservationId));
       const doc = await docRef.get();
+
+      console.log('[Storage] Buscando override:', {
+        CHAVE_BUSCADA: reservationId,
+        exists: doc.exists
+      });
+
       if (doc.exists) {
-        return { id: doc.id, ...doc.data() } as ReservationOverrides;
+        const override = { id: doc.id, ...doc.data() } as ReservationOverrides;
+        return override;
       }
       return null;
     },
 
+    /**
+     * Busca múltiplos overrides em lote
+     * @param reservationKeys - Array de chaves de overrides (já sanitizadas com getReservationOverrideKey)
+     * @returns Map<reservationKey, ReservationOverrides>
+     */
+    getMultiple: async (reservationKeys: string[]): Promise<Map<string, ReservationOverrides>> => {
+      ensureDb();
+      const result = new Map<string, ReservationOverrides>();
+
+      if (reservationKeys.length === 0) {
+        return result;
+      }
+
+      // Buscar cada documento individualmente em paralelo
+      const docPromises = reservationKeys.map(key =>
+        db.collection(COLLECTIONS.RESERVATION_OVERRIDES).doc(sanitizeDocId(key)).get()
+      );
+      const docs = await Promise.all(docPromises);
+
+      docs.forEach((doc, index) => {
+        if (doc.exists) {
+          const override = { id: doc.id, ...doc.data() } as ReservationOverrides;
+          result.set(reservationKeys[index], override);
+        }
+      });
+
+      console.log('[Storage] getMultiple concluído:', result.size, 'overrides encontrados de', reservationKeys.length, 'solicitados');
+
+      return result;
+    },
+
     set: async (overrides: Omit<ReservationOverrides, 'id'>): Promise<void> => {
       ensureDb();
-      // Preferir reservationId, fallback para externalId
-      const docId = sanitizeDocId(overrides.reservationId || overrides.externalId || '');
-      if (!docId) {
-        throw new Error('reservationId ou externalId é obrigatório');
-      }
+      // Usar getReservationOverrideKey para garantir consistência
+      const reservationForKey = {
+        id: overrides.reservationId,
+        externalId: overrides.externalId,
+        source: overrides.source
+      };
+      const docId = getReservationOverrideKey(reservationForKey);
+
+      console.log('[Storage] Salvando override:', {
+        INPUT_reservationId: overrides.reservationId,
+        INPUT_externalId: overrides.externalId,
+        INPUT_source: overrides.source,
+        CHAVE_CALCULADA: docId,
+        propertyCode: overrides.propertyCode,
+        docsSent: overrides.docsSent,
+        docsSentToBuilding: overrides.docsSentToBuilding,
+        hasChildren: overrides.hasChildren,
+        maintenanceSeenAt: overrides.maintenanceSeenAt
+      });
+
       await db.collection(COLLECTIONS.RESERVATION_OVERRIDES).doc(docId).set(cleanData({
         ...overrides
       }), { merge: true });
+
+      console.log('[Storage] Override salvo com sucesso no Firestore, docId:', docId);
     }
   },
 
