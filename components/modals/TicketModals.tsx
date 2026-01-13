@@ -19,7 +19,7 @@ interface TicketModalsProps {
  selectedTicket: Ticket | null;
  setSelectedTicket: React.Dispatch<React.SetStateAction<Ticket | null>>;
  users: UserWithPassword[];
- onUpdateStatus: (id: string, status: TicketStatus, date?: number, startedAt?: number) => void;
+ onUpdateStatus: (id: string, status: TicketStatus, date?: number, startedAt?: number, completionReport?: Ticket['completionReport']) => void;
  onAssignTicket: (id: string, assignee: string, date?: number) => void;
  onAddExpense: (ticketId: string, description: string, amount: number) => void;
  onDeleteExpense: (ticketId: string, expenseId: string) => void;
@@ -97,7 +97,7 @@ const TicketModals: React.FC<TicketModalsProps> = ({
   setTicketPreFill(undefined);
  };
 
- const handleUpdateStatus = async (id: string, status: TicketStatus, date?: string, startedAt?: number) => {
+ const handleUpdateStatus = async (id: string, status: TicketStatus, date?: string, startedAt?: number, completionReport?: Ticket['completionReport']) => {
   // Task 33: Verificar se é um ticket virtual de checkout
   const isVirtual = selectedTicket && (selectedTicket as any)._isVirtual === true;
 
@@ -105,7 +105,10 @@ const TicketModals: React.FC<TicketModalsProps> = ({
     // Criar ticket real no Firebase primeiro
     const realTicketId = generateId();
     const updates: any = { status, updatedAt: Date.now() };
-    if (status === 'Concluído' as TicketStatus) updates.completedDate = date;
+    if (status === 'Concluído' as TicketStatus) {
+      updates.completedDate = date;
+      if (completionReport) updates.completionReport = completionReport; // Task 38
+    }
     if (status === 'Em Andamento' as TicketStatus && startedAt) updates.startedAt = startedAt;
 
     const realTicket: Ticket = {
@@ -126,6 +129,7 @@ const TicketModals: React.FC<TicketModalsProps> = ({
       updatedAt: updates.updatedAt,
       completedDate: updates.completedDate,
       startedAt: updates.startedAt,
+      completionReport: updates.completionReport, // Task 38
       reservationId: selectedTicket.reservationId,
       isCheckoutTicket: true,
       category: 'maintenance',
@@ -139,7 +143,10 @@ const TicketModals: React.FC<TicketModalsProps> = ({
   } else {
     // Ticket normal - apenas fazer update
     const updates: any = { status, updatedAt: Date.now() };
-    if (status === 'Concluído' as TicketStatus) updates.completedDate = date;
+    if (status === 'Concluído' as TicketStatus) {
+      updates.completedDate = date;
+      if (completionReport) updates.completionReport = completionReport; // Task 38
+    }
     if (status === 'Em Andamento' as TicketStatus && startedAt) updates.startedAt = startedAt;
 
     storageService.tickets.update({ id, ...updates } as any);
