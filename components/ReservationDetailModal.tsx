@@ -4,7 +4,7 @@ import { Reservation, ReservationStatus, User, FlightData, Ticket } from '../typ
 import { X, Calendar, User as UserIcon, ChevronLeft, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby, Repeat, MessageSquare } from 'lucide-react';
 import { checkFlightStatus } from '../services/geminiService';
 import { storageService } from '../services/storage';
-import { getReservationOverrideKey } from '../utils';
+import { getReservationOverrideKey, formatDatePtBR } from '../utils';
 
 interface ReservationDetailModalProps {
  reservation: Reservation;
@@ -647,7 +647,7 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
             <div className="flex justify-between items-center mb-3">
               <div className="flex items-center gap-2">
                 <Calendar size={18} className="text-green-600" />
-                <span className="font-bold text-gray-900">{new Date(reservation.checkInDate).toLocaleDateString()}</span>
+                <span className="font-bold text-gray-900">{formatDatePtBR(reservation.checkInDate)}</span>
               </div>
               <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                 <input type="checkbox" checked={earlyRequest} onChange={e => setEarlyRequest(e.target.checked)} className="rounded text-green-600" />
@@ -676,7 +676,7 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
             <div className="flex justify-between items-center mb-3">
               <div className="flex items-center gap-2">
                 <Calendar size={18} className="text-red-600" />
-                <span className="font-bold text-gray-900">{new Date(reservation.checkOutDate).toLocaleDateString()}</span>
+                <span className="font-bold text-gray-900">{formatDatePtBR(reservation.checkOutDate)}</span>
               </div>
               <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                 <input type="checkbox" checked={lateRequest} onChange={e => setLateRequest(e.target.checked)} className="rounded text-red-600" />
@@ -809,7 +809,7 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
                    <h4 className="font-bold text-gray-800 text-sm">Status Manutenção</h4>
                    <p className="text-xs text-gray-500">
                      {maintenanceSeenAt 
-                      ? `Visto por ${maintenanceSeenBy?.split(' ')[0]} em ${new Date(maintenanceSeenAt).toLocaleDateString()}` 
+                      ? `Visto por ${maintenanceSeenBy?.split(' ')[0]} em ${formatDatePtBR(maintenanceSeenAt)}` 
                       : 'Ainda não visualizado ou possui alterações recentes.'}
                    </p>
                  </div>
@@ -854,7 +854,7 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
               <div className="flex-1">
               <p className="font-medium text-gray-900">{exp.description}</p>
               <p className="text-xs text-gray-500">
-                {new Date(exp.createdAt).toLocaleDateString()} por {exp.createdBy} • <span className="text-blue-600 font-medium bg-blue-50 px-1 rounded">{exp.paymentMethod}</span>
+                {formatDatePtBR(exp.createdAt)} por {exp.createdBy} • <span className="text-blue-600 font-medium bg-blue-50 px-1 rounded">{exp.paymentMethod}</span>
               </p>
               </div>
               <div className="flex items-center gap-4">
@@ -959,7 +959,7 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
                 <div key={t.id} className="bg-gray-50 p-3 rounded-lg border border-gray-200 flex justify-between items-center">
                   <div className="min-w-0 flex-1 pr-2">
                     <p className="font-medium text-gray-900 text-sm truncate">{t.serviceType}: {t.description}</p>
-                    <p className="text-xs text-gray-500">{new Date(t.createdAt).toLocaleDateString()} • {t.assignee || 'Sem técnico'}</p>
+                    <p className="text-xs text-gray-500">{formatDatePtBR(t.createdAt)} • {t.assignee || 'Sem técnico'}</p>
                   </div>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase whitespace-nowrap
                     ${t.status === 'Concluído' ? 'bg-green-100 text-green-700' : 

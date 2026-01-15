@@ -8,7 +8,7 @@ import {
  Crown, Clock, ChevronRight, Phone, Mail, Filter, ArrowUpDown,
  LogIn, LogOut, Home, X, FileCheck, CheckCircle2, Baby, AlertCircle
 } from 'lucide-react';
-import { formatCurrency } from '../utils';
+import { formatCurrency, parseLocalDate, formatDatePtBR, getTodayBrazil, isToday as checkIsToday } from '../utils';
 import { getDetailedFinancials, getCalendar } from '../services/staysApiService';
 import { storageService } from '../services/storage';
 import ReservationDetailModal from './ReservationDetailModal';
@@ -286,15 +286,14 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
 
   // 2. Status Filter
   if (filterStatus !== 'all') {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getTodayBrazil();
     const todayTime = today.getTime();
 
     list = list.filter(g => {
       return g.reservations.some(r => {
         if (r.status === ReservationStatus.CANCELED) return false;
-        const cin = new Date(r.checkInDate); cin.setHours(0,0,0,0);
-        const cout = new Date(r.checkOutDate); cout.setHours(0,0,0,0);
+        const cin = parseLocalDate(r.checkInDate);
+        const cout = parseLocalDate(r.checkOutDate);
         const cinTime = cin.getTime();
         const coutTime = cout.getTime();
 
@@ -591,8 +590,11 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
                 </div>
                 <div className="divide-y divide-gray-100 max-h-[400px] overflow-y-auto">
                   {activeGuest.reservations.map(res => {
-                    const isFuture = new Date(res.checkInDate).getTime() > Date.now();
-                    const isCurrent = new Date(res.checkInDate).getTime() <= Date.now() && new Date(res.checkOutDate).getTime() >= Date.now();
+                    const today = getTodayBrazil();
+                    const checkIn = parseLocalDate(res.checkInDate);
+                    const checkOut = parseLocalDate(res.checkOutDate);
+                    const isFuture = checkIn.getTime() > today.getTime();
+                    const isCurrent = checkIn.getTime() <= today.getTime() && checkOut.getTime() >= today.getTime();
                     
                     // Get overrides for this reservation
                     const resId = res.id || res.externalId || '';
@@ -669,7 +671,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
                             </div>
                             
                             <p className="text-xs text-gray-500 mt-0.5">
-                              {new Date(res.checkInDate).toLocaleDateString()} - {new Date(res.checkOutDate).toLocaleDateString()}
+                              {formatDatePtBR(res.checkInDate)} - {formatDatePtBR(res.checkOutDate)}
                             </p>
                             
                             {/* Task 42: Early Check-in / Late Check-out indicators */}
@@ -730,7 +732,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${
                             t.category === 'concierge' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'
                           }`}>{t.category || 'Manutenção'}</span>
-                          <span className="text-xs text-gray-400">{new Date(t.createdAt).toLocaleDateString()}</span>
+                          <span className="text-xs text-gray-400">{formatDatePtBR(t.createdAt)}</span>
                         </div>
                         <p className="text-sm font-medium text-gray-800">{t.description}</p>
                         <p className="mt-1 text-xs text-gray-500">Imóvel: {t.propertyCode} • Status: {t.status}</p>
@@ -762,7 +764,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
                               <Star key={s} size={10} className={s <= rev.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"} />
                             ))}
                           </div>
-                          <span className="text-[10px] text-gray-400">{new Date(rev.date).toLocaleDateString()}</span>
+                          <span className="text-[10px] text-gray-400">{formatDatePtBR(rev.date)}</span>
                         </div>
                         <p className="text-xs italic text-gray-700">"{rev.comment}"</p>
                         <div className="flex items-center gap-2 mt-2">

@@ -6,10 +6,77 @@ export const generateId = (): string => {
 };
 
 /**
- * Format date to pt-BR locale string
+ * TIMEZONE DO BRASIL para todas as operações de data
+ */
+const BRAZIL_TZ = 'America/Sao_Paulo';
+
+/**
+ * Converte string de data YYYY-MM-DD para Date no timezone do Brasil (meio-dia)
+ * Evita problemas de timezone ao interpretar datas como strings
+ */
+export const parseLocalDate = (dateStr: string): Date => {
+  // Força interpretação como meio-dia no timezone do Brasil
+  // Evita que "2026-01-14" seja interpretado como UTC 00:00
+  return new Date(dateStr + 'T12:00:00-03:00');
+};
+
+/**
+ * Retorna a data de HOJE no timezone do Brasil (sem hora)
+ */
+export const getTodayBrazil = (): Date => {
+  const now = new Date();
+  // Converte para string no formato YYYY-MM-DD e depois para Date do Brasil
+  const dateStr = now.toLocaleDateString('en-CA'); // 'en-CA' retorna YYYY-MM-DD
+  return parseLocalDate(dateStr);
+};
+
+/**
+ * Retorna a data de AMANHÃ no timezone do Brasil (sem hora)
+ */
+export const getTomorrowBrazil = (): Date => {
+  const today = getTodayBrazil();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return tomorrow;
+};
+
+/**
+ * Verifica se uma data (string ou Date) é HOJE no timezone do Brasil
+ */
+export const isToday = (date: string | Date): boolean => {
+  const dateToCheck = typeof date === 'string' ? parseLocalDate(date) : date;
+  const today = getTodayBrazil();
+  return dateToCheck.toDateString() === today.toDateString();
+};
+
+/**
+ * Verifica se uma data (string ou Date) é AMANHÃ no timezone do Brasil
+ */
+export const isTomorrow = (date: string | Date): boolean => {
+  const dateToCheck = typeof date === 'string' ? parseLocalDate(date) : date;
+  const tomorrow = getTomorrowBrazil();
+  return dateToCheck.toDateString() === tomorrow.toDateString();
+};
+
+/**
+ * Format date to pt-BR locale string (com timezone correto)
  */
 export const formatDatePtBR = (date: Date | number | string, options?: Intl.DateTimeFormatOptions): string => {
-  const d = typeof date === 'number' || typeof date === 'string' ? new Date(date) : date;
+  let d: Date;
+  
+  if (typeof date === 'string') {
+    // Se for string no formato YYYY-MM-DD, usa parseLocalDate
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      d = parseLocalDate(date);
+    } else {
+      d = new Date(date);
+    }
+  } else if (typeof date === 'number') {
+    d = new Date(date);
+  } else {
+    d = date;
+  }
+  
   return d.toLocaleDateString('pt-BR', options);
 };
 

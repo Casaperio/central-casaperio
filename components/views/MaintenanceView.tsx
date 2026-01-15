@@ -6,6 +6,7 @@ import { SkeletonCard, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import { TypeFilter } from './TypeFilter';
 import PeriodFilter from './PeriodFilter';
+import { parseLocalDate, formatDatePtBR, isToday, isTomorrow } from '../../utils';
 
 interface MaintenanceViewProps {
   tickets: Ticket[];
@@ -166,24 +167,24 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                 <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${group.isBacklog ? 'text-orange-600' : activeModule === 'concierge' ? 'text-purple-600' : 'text-brand-600'}`}>
                   {group.isBacklog ? <AlertCircle size={16}/> : <CalendarClock size={16}/>}
                   {group.label}
-                  {group.date && <span className="ml-2 text-xs font-normal text-gray-400">{new Date(group.date).toLocaleDateString()}</span>}
+                  {group.date && <span className="ml-2 text-xs font-normal text-gray-400">{formatDatePtBR(group.date)}</span>}
                 </h3>
                 <div className={`grid gap-4 ${getGridClass()}`}>
                   {group.items.map((item, index) => {
                     // Task 33 + 34: Exibir cards de checkout e ao clicar abrir modal simples
                     if ('type' in item && item.type === 'checkout') {
                       const r = item.reservation;
-                      const checkoutDate = new Date(r.checkOutDate);
-                      const isToday = checkoutDate.toDateString() === new Date().toDateString();
-                      const isTomorrow = checkoutDate.toDateString() === new Date(Date.now() + 86400000).toDateString();
+                      const checkoutDate = parseLocalDate(r.checkOutDate);
+                      const isTodayCheckout = isToday(r.checkOutDate);
+                      const isTomorrowCheckout = isTomorrow(r.checkOutDate);
 
                       return (
                         <div
                           key={`checkout-${r.id}`}
                           onClick={() => handleCheckoutCardClick(r)}
                           className={`bg-white p-4 rounded-lg border shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden flex flex-col min-w-0 ${
-                            isToday ? 'ring-2 ring-red-400 bg-red-50/30' :
-                            isTomorrow ? 'ring-2 ring-orange-400 bg-orange-50/30' :
+                            isTodayCheckout ? 'ring-2 ring-red-400 bg-red-50/30' :
+                            isTomorrowCheckout ? 'ring-2 ring-orange-400 bg-orange-50/30' :
                             'ring-2 ring-violet-400 bg-violet-50/30'
                           }`}
                         >
@@ -193,7 +194,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
 
                           <div className="flex items-start justify-between mt-2 mb-2">
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-violet-50 text-violet-700">
-                              {isToday ? 'HOJE' : isTomorrow ? 'AMANHÃ' : checkoutDate.toLocaleDateString('pt-BR')}
+                              {isTodayCheckout ? 'HOJE' : isTomorrowCheckout ? 'AMANHÃ' : formatDatePtBR(r.checkOutDate)}
                             </span>
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700">
                               Limpeza de Check-out
@@ -293,7 +294,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
               <p className="text-xs text-gray-500 truncate max-w-[200px]">{ticket.description}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs font-medium text-gray-900">{new Date(ticket.desiredDate).toLocaleDateString()}</p>
+              <p className="text-xs font-medium text-gray-900">{formatDatePtBR(ticket.desiredDate)}</p>
             </div>
           </div>
         ))

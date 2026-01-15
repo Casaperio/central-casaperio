@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, ZoomIn, ZoomOut, Users, Filter, XCircle } from 'lucide-react';
 import MarqueeText from './MarqueeText';
 import type { CalendarUnit, CalendarReservation } from '../services/staysApiService';
+import { parseLocalDate, getTodayBrazil } from '../utils';
 
 interface GeneralCalendarProps {
  units: CalendarUnit[];
@@ -10,9 +11,9 @@ interface GeneralCalendarProps {
 
 const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationClick }) => {
  const [startDate, setStartDate] = useState(() => {
-  const d = new Date();
-  d.setDate(d.getDate() - 2); // Start slightly before today
-  return d;
+  const today = getTodayBrazil();
+  today.setDate(today.getDate() - 2); // Start slightly before today
+  return today;
  });
  
  // 1 = Out (3 Months), 2 = Mid (1 Month), 3 = In (2 Weeks)
@@ -74,10 +75,8 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
  };
 
  const getPosition = (dateStr: string) => {
-  const date = new Date(dateStr);
-  const start = new Date(dates[0]);
-  date.setHours(0,0,0,0);
-  start.setHours(0,0,0,0);
+  const date = parseLocalDate(dateStr);
+  const start = dates[0];
   
   const diffTime = date.getTime() - start.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -86,10 +85,8 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
  };
 
  const getWidth = (checkIn: string, checkOut: string) => {
-  const start = new Date(checkIn);
-  const end = new Date(checkOut);
-  start.setHours(0,0,0,0);
-  end.setHours(0,0,0,0);
+  const start = parseLocalDate(checkIn);
+  const end = parseLocalDate(checkOut);
   
   const diffTime = end.getTime() - start.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -100,8 +97,8 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
  const isVisible = (res: CalendarReservation) => {
   const viewStart = dates[0];
   const viewEnd = dates[dates.length - 1];
-  const cin = new Date(res.startDate);
-  const cout = new Date(res.endDate);
+  const cin = parseLocalDate(res.startDate);
+  const cout = parseLocalDate(res.endDate);
   // Standard intersection check
   return (cin < viewEnd && cout > viewStart);
  };
@@ -175,7 +172,7 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
         <button onClick={() => changeDate(7)} className="p-1 text-gray-600 rounded shadow-sm hover:bg-white"><ChevronRight size={16}/></button>
       </div>
       <button 
-        onClick={() => { const d = new Date(); d.setDate(d.getDate() - 2); setStartDate(d); }}
+        onClick={() => { const d = getTodayBrazil(); d.setDate(d.getDate() - 2); setStartDate(d); }}
         className="text-xs font-medium text-brand-600 hover:underline"
       >
         Voltar pra Hoje
@@ -266,17 +263,18 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
            <div className="flex">
              {dates.map((d, i) => {
                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-               const isToday = d.toDateString() === new Date().toDateString();
+               const today = getTodayBrazil();
+               const isTodayDate = d.toDateString() === today.toDateString();
                return (
                  <div 
                   key={i} 
                   style={{ width: CELL_WIDTH }} 
-                  className={`flex flex-col items-center justify-center border-r border-gray-200 py-1 ${isToday ? 'bg-brand-50' : isWeekend ? 'bg-gray-100/50' : ''}`}
+                  className={`flex flex-col items-center justify-center border-r border-gray-200 py-1 ${isTodayDate ? 'bg-brand-50' : isWeekend ? 'bg-gray-100/50' : ''}`}
                  >
-                   <span className={`text-[9px] uppercase ${isToday ? 'text-brand-600 font-bold' : 'text-gray-400'}`}>
+                   <span className={`text-[9px] uppercase ${isTodayDate ? 'text-brand-600 font-bold' : 'text-gray-400'}`}>
                      {d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
                    </span>
-                   <span className={`text-xs font-bold ${isToday ? 'text-brand-700' : 'text-gray-700'}`}>
+                   <span className={`text-xs font-bold ${isTodayDate ? 'text-brand-700' : 'text-gray-700'}`}>
                      {d.getDate()}
                    </span>
                  </div>
@@ -340,7 +338,7 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
                         width: `${renderWidth - 2}px`
                       }}
                       className={`absolute top-1.5 bottom-1.5 rounded-full border shadow-sm cursor-pointer hover:brightness-95 hover:-translate-y-px transition-all flex items-center px-1 overflow-hidden z-10 ${isBlocked ? 'bg-[#E74C3C] border-[#c0392b] text-white' : getReservationColor(res)}`}
-                      title={`${res.guestName} - ${res.guestCount} Pax\n${res.platform || 'Direto'}\n${new Date(res.startDate).toLocaleDateString()} -> ${new Date(res.endDate).toLocaleDateString()}`}
+                      title={`${res.guestName} - ${res.guestCount} Pax\n${res.platform || 'Direto'}\n${parseLocalDate(res.startDate).toLocaleDateString('pt-BR')} -> ${parseLocalDate(res.endDate).toLocaleDateString('pt-BR')}`}
                      >
                        <MarqueeText className="flex items-center w-full h-full text-[10px]">
                          {/* Platform Icon */}

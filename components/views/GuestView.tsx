@@ -11,7 +11,7 @@ import CalendarView from '../CalendarView';
 import PeriodFilter, { PeriodPreset } from './PeriodFilter';
 import { useGuestPeriodFilter } from '../../hooks/features/useGuestPeriodFilter';
 import { storageService } from '../../services/storage';
-import { getReservationOverrideKey } from '../../utils';
+import { getReservationOverrideKey, parseLocalDate, formatDatePtBR } from '../../utils';
 
 interface GuestViewProps {
   staysReservations: Reservation[];
@@ -191,7 +191,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
               <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${group.isToday ? 'text-blue-600' : 'text-gray-600'}`}>
                 <CalendarClock size={16}/>
                 {group.label}
-                <span className="ml-2 text-xs font-normal text-gray-400">{new Date(group.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                <span className="ml-2 text-xs font-normal text-gray-400">{formatDatePtBR(group.date)}</span>
               </h3>
               {group.items.length === 0 ? (
                 <div className="p-4 text-sm text-center text-gray-300 bg-white border border-gray-100 border-dashed rounded-lg">
@@ -332,7 +332,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
                           )}
                         </div>
                         <p className="h-10 mb-3 text-xs text-gray-500 line-clamp-2">
-                          {new Date(reservation.checkInDate).toLocaleDateString('pt-BR')} - {new Date(reservation.checkOutDate).toLocaleDateString('pt-BR')}
+                          {formatDatePtBR(reservation.checkInDate)} - {formatDatePtBR(reservation.checkOutDate)}
                         </p>
 
                         <div className="flex items-center justify-between pt-2 mt-auto border-t border-gray-100">
@@ -367,7 +367,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
               <h3 className={`text-sm font-bold uppercase tracking-wider mb-2 flex items-center gap-2 ${group.isToday ? 'text-blue-600' : 'text-gray-600'}`}>
                 <CalendarClock size={16}/>
                 {group.label}
-                <span className="ml-2 text-xs font-normal text-gray-400">{new Date(group.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                <span className="ml-2 text-xs font-normal text-gray-400">{formatDatePtBR(group.date)}</span>
               </h3>
 
               {/* Lista de reservas do grupo - mesma ordem dos Cards */}
@@ -459,7 +459,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
                     <div className="text-right ml-2 whitespace-nowrap">
                       <p className="text-xs font-medium text-gray-900">
-                        {new Date(reservation.checkInDate).toLocaleDateString('pt-BR')}
+                        {formatDatePtBR(reservation.checkInDate)}
                       </p>
                     </div>
                   </div>
