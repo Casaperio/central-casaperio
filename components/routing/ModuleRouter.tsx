@@ -82,6 +82,7 @@ interface ModuleRouterProps {
   }) => Promise<void>;
   handleActivateTablet: (propertyCode: string) => void;
   handleOpenFieldApp: () => void;
+  maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>;
 }
 
 export function ModuleRouter({
@@ -117,6 +118,7 @@ export function ModuleRouter({
   createInventoryTransaction,
   handleActivateTablet,
   handleOpenFieldApp,
+  maintenanceOverrides,
 }: ModuleRouterProps) {
 
   if (viewMode === 'stats') {
@@ -324,6 +326,7 @@ export function ModuleRouter({
           tickets={tickets}
           feedbacks={feedbacks}
           currentUser={currentUser}
+          maintenanceOverrides={maintenanceOverrides}
         />
       </Suspense>
     );

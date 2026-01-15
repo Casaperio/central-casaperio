@@ -8,7 +8,7 @@ import {
  Crown, Clock, ChevronRight, Phone, Mail, Filter, ArrowUpDown,
  LogIn, LogOut, Home, X, FileCheck, CheckCircle2, Baby, AlertCircle
 } from 'lucide-react';
-import { formatCurrency, parseLocalDate, formatDatePtBR, getTodayBrazil, isToday as checkIsToday } from '../utils';
+import { formatCurrency, parseLocalDate, formatDatePtBR, getTodayBrazil, isToday as checkIsToday, getMaintenanceItemKey } from '../utils';
 import { getDetailedFinancials, getCalendar } from '../services/staysApiService';
 import { storageService } from '../services/storage';
 import ReservationDetailModal from './ReservationDetailModal';
@@ -18,6 +18,7 @@ interface GuestCRMProps {
  tickets: Ticket[];
  feedbacks: GuestFeedback[];
  currentUser?: { role: string; name: string }; // Add currentUser for role-based visibility
+ maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>; // Para filtrar dispensados
 }
 
 interface ConsolidatedGuest {
@@ -68,7 +69,7 @@ const formatPhoneBR = (phone: string): string => {
   return phone;
 };
 
-const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, currentUser = { role: '', name: '' } }) => {
+const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, currentUser = { role: '', name: '' }, maintenanceOverrides = {} }) => {
  const queryClient = useQueryClient();
  const [searchTerm, setSearchTerm] = useState('');
  const [selectedGuestName, setSelectedGuestName] = useState<string | null>(null);
@@ -82,6 +83,16 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
  
  // Force refetch overrides (used to refresh after changes)
  const [refetchTrigger, setRefetchTrigger] = useState(0);
+
+ // Filtrar reservas dispensadas (hidden)
+ const filteredReservations = useMemo(() => {
+   return reservations.filter(res => {
+     const checkoutItem = { type: 'checkout' as const, reservation: res };
+     const itemKey = getMaintenanceItemKey(checkoutItem);
+     const isHidden = maintenanceOverrides[itemKey]?.hidden;
+     return !isHidden; // Não mostrar se estiver hidden
+   });
+ }, [reservations, maintenanceOverrides]);
 
  // Fetch financial data from Stays API
  const { data: financialData } = useQuery({
@@ -106,10 +117,10 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
  
  // Fetch overrides for all reservations to show indicators
  const { data: reservationOverrides = {}, refetch: refetchOverrides } = useQuery({
-  queryKey: ['reservation-overrides', reservations.map(r => r.id || r.externalId).join(','), refetchTrigger],
+  queryKey: ['reservation-overrides', filteredReservations.map(r => r.id || r.externalId).join(','), refetchTrigger],
   queryFn: async () => {
     const overridesMap: Record<string, any> = {};
-    for (const res of reservations) {
+    for (const res of filteredReservations) {
       const resId = res.id || res.externalId;
       if (resId) {
         try {
@@ -167,7 +178,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
   const now = Date.now();
 
   // 1. Process Reservations
-  reservations.forEach(res => {
+  filteredReservations.forEach(res => {
    // Normalize name
    const name = res.guestName.trim();
    if (!name || name === 'Hóspede (Stays)' || name === 'Bloqueio') return;
@@ -243,7 +254,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
   tickets.forEach(t => {
     // Find guest by Reservation ID
     if (t.reservationId) {
-      const res = reservations.find(r => r.id === t.reservationId);
+      const res = filteredReservations.find(r => r.id === t.reservationId);
       if (res && guestMap[res.guestName]) {
         guestMap[res.guestName].tickets.push(t);
         return;
@@ -278,7 +289,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
   });
 
   return result;
- }, [reservations, tickets, feedbacks, financialMap, guestContactMap]);
+ }, [filteredReservations, tickets, feedbacks, financialMap, guestContactMap]);
 
  const filteredGuests = useMemo(() => {
   // 1. Search Filter
@@ -835,7 +846,29 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
          setRefetchTrigger(prev => prev + 1);
        }}
        onUpdateDetails={() => {}}
-       onDelete={() => {}}
+       onDelete={async (id: string) => {
+         // Para reservas da API Stays, não podemos deletar - apenas dispensar
+         if (selectedReservation.externalId) {
+           console.log('[GuestCRM] Não é possível deletar reserva da API Stays:', id);
+           alert('Esta é uma reserva da API Stays e não pode ser deletada. Use "Dispensar" para escondê-la da visualização.');
+         }
+       }}
+       onDismissCheckout={selectedReservation.externalId ? async (reservation: Reservation) => {
+         const checkoutItem = { type: 'checkout' as const, reservation };
+         const itemKey = getMaintenanceItemKey(checkoutItem);
+         
+         try {
+           await storageService.maintenanceOverrides.hide(itemKey);
+           console.log('[GuestCRM] Reserva dispensada:', itemKey);
+           setSelectedReservation(null);
+           // Refetch para atualizar a lista
+           queryClient.invalidateQueries({ queryKey: ['reservation-overrides'] });
+           setRefetchTrigger(prev => prev + 1);
+         } catch (error) {
+           console.error('[GuestCRM] Erro ao dispensar:', error);
+           alert('Erro ao dispensar checkout. Tente novamente.');
+         }
+       } : undefined}
        onAddExpense={() => {}}
        onDeleteExpense={() => {}}
      />

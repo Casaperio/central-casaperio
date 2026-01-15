@@ -774,6 +774,7 @@ function AppContent() {
              createInventoryTransaction={createInventoryTransaction}
              handleActivateTablet={handleActivateTablet}
              handleOpenFieldApp={handleOpenFieldApp}
+             maintenanceOverrides={maintenanceOverrides}
            />
 
         </main>
