@@ -301,8 +301,8 @@ function AppContent() {
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
 
-  // Guest Period Filter (default: 'all' - sem filtro)
-  const [guestPeriodPreset, setGuestPeriodPreset] = useState<PeriodPreset>('all');
+  // Guest Period Filter (default: '7days' - próximos 7 dias a partir de hoje)
+  const [guestPeriodPreset, setGuestPeriodPreset] = useState<PeriodPreset>('7days');
   const [guestCustomStartDate, setGuestCustomStartDate] = useState<string>('');
   const [guestCustomEndDate, setGuestCustomEndDate] = useState<string>('');
 

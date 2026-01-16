@@ -88,7 +88,7 @@ export function useGuestPeriodFilter({
 
     switch (periodPreset) {
       case 'today':
-        // Hoje: apenas hoje
+        // Hoje: apenas o dia de hoje
         startDate = new Date(now);
         endDate = new Date(now);
         break;

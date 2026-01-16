@@ -10,6 +10,8 @@ import { SkeletonAgenda, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import PeriodFilter, { PeriodPreset } from './PeriodFilter';
 import { useGuestPeriodFilter } from '../../hooks/features/useGuestPeriodFilter';
+import { usePagination } from '../../hooks/features/usePagination';
+import { PaginationBar } from '../ui/PaginationBar';
 import { storageService } from '../../services/storage';
 import { getReservationOverrideKey, parseLocalDate, formatDatePtBR } from '../../utils';
 
@@ -72,6 +74,14 @@ export const GuestView: React.FC<GuestViewProps> = ({
     customStartDate: guestCustomStartDate,
     customEndDate: guestCustomEndDate,
     searchTerm,
+  });
+
+  // Paginação: reset quando filtros mudarem
+  const resetTrigger = `${guestPeriodPreset}-${guestCustomStartDate}-${guestCustomEndDate}-${searchTerm}`;
+  const { paginatedItems: paginatedAgendaGroups, pagination } = usePagination({
+    items: filteredAgendaGroups,
+    initialItemsPerPage: 10,
+    resetTrigger,
   });
 
   // Task 40-43: Carregar overrides em lote para mostrar tags nos cards
@@ -181,12 +191,13 @@ export const GuestView: React.FC<GuestViewProps> = ({
           onItemClick={setSelectedReservation}
         />
       ) : viewMode === 'cards' ? (
-        filteredAgendaGroups.length === 0 ? (
-          <div className="p-8 text-center text-gray-400 bg-white border border-gray-200 border-dashed rounded-lg">
-            Nenhuma reserva encontrada.
-          </div>
-        ) : (
-          filteredAgendaGroups.map(group => (
+        <>
+          {filteredAgendaGroups.length === 0 ? (
+            <div className="p-8 text-center text-gray-400 bg-white border border-gray-200 border-dashed rounded-lg">
+              Nenhuma reserva encontrada.
+            </div>
+          ) : (
+            paginatedAgendaGroups.map(group => (
             <div key={group.date} className="animate-fade-in">
               <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${group.isToday ? 'text-blue-600' : 'text-gray-600'}`}>
                 <CalendarClock size={16}/>
@@ -353,15 +364,20 @@ export const GuestView: React.FC<GuestViewProps> = ({
               )}
             </div>
           ))
-        )
+        )}
+
+        {/* Barra de paginação inferior */}
+        <PaginationBar pagination={pagination} />
+        </>
       ) : (
-        // Modo Lista - Usa a mesma fonte dos Cards (filteredAgendaGroups)
-        filteredAgendaGroups.length === 0 ? (
-          <div className="p-8 text-center text-gray-400 bg-white border border-gray-200 border-dashed rounded-lg">
-            Nenhuma reserva encontrada.
-          </div>
-        ) : (
-          filteredAgendaGroups.map(group => (
+        // Modo Lista - Usa a mesma fonte dos Cards com paginação
+        <>
+          {filteredAgendaGroups.length === 0 ? (
+            <div className="p-8 text-center text-gray-400 bg-white border border-gray-200 border-dashed rounded-lg">
+              Nenhuma reserva encontrada.
+            </div>
+          ) : (
+            paginatedAgendaGroups.map(group => (
             <div key={group.date} className="space-y-2 animate-fade-in">
               {/* Header do grupo de data - igual aos Cards */}
               <h3 className={`text-sm font-bold uppercase tracking-wider mb-2 flex items-center gap-2 ${group.isToday ? 'text-blue-600' : 'text-gray-600'}`}>
@@ -467,7 +483,11 @@ export const GuestView: React.FC<GuestViewProps> = ({
               })}
             </div>
           ))
-        )
+          )}
+
+          {/* Barra de paginação inferior */}
+          <PaginationBar pagination={pagination} />
+        </>
       )}
     </div>
   );
