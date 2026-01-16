@@ -34,6 +34,11 @@ interface UseNewReservationDetectorProps {
   onNewReservation: (reservations: Reservation[]) => void;
   addLog: (action: string, details: string) => void;
   addNotification: (title: string, message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
+  /**
+   * Filter state signature to detect when user changes filters
+   * When this changes, we reset the detector to avoid false "new reservation" alerts
+   */
+  filterSignature?: string;
 }
 
 /**
@@ -45,14 +50,29 @@ export function useNewReservationDetector({
   currentUser,
   onNewReservation,
   addLog,
-  addNotification
+  addNotification,
+  filterSignature
 }: UseNewReservationDetectorProps) {
   const previousReservationsRef = useRef<Reservation[]>([]);
+  const previousFilterSignatureRef = useRef<string | undefined>(filterSignature);
 
   // Verificar se usuário tem permissão para receber notificações
   const hasPermission = shouldReceiveNewReservationNotification(currentUser);
 
   useEffect(() => {
+    // Detectar mudança de filtro - resetar previousRef para evitar falsos positivos
+    if (filterSignature !== previousFilterSignatureRef.current) {
+      console.log('🔄 [NEW RESERVATION DETECTOR] Filtro mudou - resetando detector');
+      console.log('  Filtro anterior:', previousFilterSignatureRef.current);
+      console.log('  Filtro novo:', filterSignature);
+      previousFilterSignatureRef.current = filterSignature;
+      previousReservationsRef.current = staysReservations;
+      
+      // Salvar IDs atuais no localStorage para evitar duplicatas no reload
+      const currentIds = staysReservations.map(r => r.id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentIds));
+      return;
+    }
     console.log('🔍 [NEW RESERVATION DETECTOR] useEffect executou');
     console.log('  📊 Total atual:', staysReservations.length, 'reservas');
     console.log('  📚 Total anterior:', previousReservationsRef.current.length, 'reservas');

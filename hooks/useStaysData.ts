@@ -60,14 +60,40 @@ function getTodayStr(): string {
   return `${year}-${month}-${day}`;
 }
 
-export function useStaysData(): UseStaysDataReturn {
+/**
+ * Formats a Date object to YYYY-MM-DD string
+ */
+function formatDateStr(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+interface UseStaysDataOptions {
+  /**
+   * Optional start date for filtering data (YYYY-MM-DD)
+   * If not provided, backend will use default range (-30 days)
+   */
+  from?: string;
+  
+  /**
+   * Optional end date for filtering data (YYYY-MM-DD)
+   * If not provided, backend will use default range (+30 days for dashboard, +3 months for calendar)
+   */
+  to?: string;
+}
+
+export function useStaysData(options: UseStaysDataOptions = {}): UseStaysDataReturn {
   const queryClient = useQueryClient();
+  const { from, to } = options;
 
   // Track current date to detect day changes (midnight crossing)
   const [currentDateStr, setCurrentDateStr] = useState(getTodayStr);
   const lastDateCheckRef = useRef(getTodayStr());
 
   // Single query for all data using the unified endpoint
+  // Include from/to in queryKey so cache is invalidated when date range changes
   const {
     data,
     isLoading,
@@ -76,8 +102,8 @@ export function useStaysData(): UseStaysDataReturn {
     dataUpdatedAt,
     refetch,
   } = useQuery({
-    queryKey: ['stays-all-data'],
-    queryFn: () => getAllData(),
+    queryKey: ['stays-all-data', from, to],
+    queryFn: () => getAllData(from, to),
     staleTime: STALE_TIME,
     refetchInterval: REFETCH_INTERVAL,
     refetchIntervalInBackground: true,

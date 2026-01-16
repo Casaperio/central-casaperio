@@ -138,23 +138,35 @@ export function useGuestPeriodFilter({
 
   // Filtrar AgendaGroups (ÚNICA FONTE DE VERDADE para Cards e Lista)
   const filteredAgendaGroups = useMemo(() => {
+    console.log('🔍 [GUEST PERIOD FILTER] Filtrando agenda groups');
+    console.log('  📊 Total de grupos recebidos:', staysAgendaGroups.length);
+    console.log('  📅 Período:', shouldFilterByPeriod ? `${periodStartDate?.toISOString().split('T')[0]} → ${periodEndDate?.toISOString().split('T')[0]}` : 'SEM FILTRO');
+    
     let groups = staysAgendaGroups;
 
     // 1. Aplicar filtro de período nos grupos por data
     if (shouldFilterByPeriod && periodStartDate && periodEndDate) {
-      groups = groups.filter(group => {
+      const filteredGroups = groups.filter(group => {
+        // Parse group date correctly (format: YYYY-MM-DD)
         const groupDate = new Date(group.date + 'T00:00:00');
         groupDate.setHours(0, 0, 0, 0);
 
         // Intervalo inclusivo: [startDate, endDate]
-        return groupDate >= periodStartDate && groupDate <= periodEndDate;
+        const isInRange = groupDate >= periodStartDate && groupDate <= periodEndDate;
+        return isInRange;
       });
+      
+      console.log('  ✅ Grupos após filtro de período:', filteredGroups.length);
+      groups = filteredGroups;
+    } else {
+      console.log('  ℹ️ Sem filtro de período - mostrando todos os grupos');
     }
 
     // 2. Aplicar busca (filtrar items dentro dos grupos)
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      groups = groups.map(group => ({
+      console.log('  🔍 Aplicando busca:', term);
+      const searchedGroups = groups.map(group => ({
         ...group,
         items: group.items.filter(r =>
           r.guestName.toLowerCase().includes(term) ||
@@ -162,6 +174,8 @@ export function useGuestPeriodFilter({
           r.channel?.toLowerCase().includes(term)
         )
       })).filter(group => group.items.length > 0);
+      console.log('  ✅ Grupos após busca:', searchedGroups.length);
+      groups = searchedGroups;
     }
 
     // 3. Ordenar items dentro de cada grupo por status
@@ -170,6 +184,11 @@ export function useGuestPeriodFilter({
       ...group,
       items: sortGroupItems(group.items)
     }));
+
+    console.log('  🎯 RESULTADO FINAL:', groups.length, 'grupos');
+    if (groups.length > 0) {
+      console.log('  📋 Primeiros 3 grupos:', groups.slice(0, 3).map(g => ({ date: g.date, items: g.items.length })));
+    }
 
     return groups;
   }, [staysAgendaGroups, shouldFilterByPeriod, periodStartDate, periodEndDate, searchTerm]);

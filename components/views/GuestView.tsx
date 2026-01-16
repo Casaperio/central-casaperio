@@ -199,7 +199,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
                 </div>
               ) : (
                 <div className={`grid gap-4 ${getGridClass()}`}>
-                  {group.items.map(reservation => {
+                  {group.items.map((reservation, idx) => {
                     const dailyStatus = reservation.dailyStatus;
                     const reservationCount = guestReservationCount.get(normalizeGuestName(reservation.guestName)) || 0;
 
@@ -223,7 +223,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
                     return (
                       <div
-                        key={reservation.id}
+                        key={`${group.date}-${reservation.id}-${idx}`}
                         onClick={() => setSelectedReservation(reservation)}
                         className={`bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden flex flex-col min-w-0 ${
                           dailyStatus === 'CHECKIN' ? 'ring-2 ring-green-500 bg-green-50/20' :
@@ -371,7 +371,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
               </h3>
 
               {/* Lista de reservas do grupo - mesma ordem dos Cards */}
-              {group.items.map(reservation => {
+              {group.items.map((reservation, idx) => {
                 const dailyStatus = reservation.dailyStatus;
                 const reservationCount = guestReservationCount.get(normalizeGuestName(reservation.guestName)) || 0;
 
@@ -387,7 +387,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
                 return (
                   <div
-                    key={reservation.id}
+                    key={`${group.date}-${reservation.id}-${idx}`}
                     onClick={() => setSelectedReservation(reservation)}
                     className="flex items-center justify-between p-3 transition-colors bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 relative"
                   >
