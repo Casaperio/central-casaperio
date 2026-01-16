@@ -306,6 +306,9 @@ function AppContent() {
   const [guestCustomStartDate, setGuestCustomStartDate] = useState<string>('');
   const [guestCustomEndDate, setGuestCustomEndDate] = useState<string>('');
 
+  // Guest Status Filter (default: ['ALL'] - todos os status)
+  const [guestSelectedStatuses, setGuestSelectedStatuses] = useState<string[]>(['ALL']);
+
   // Stays API Data (from stays-api backend)
   // STRATEGY: Fetch ALL data from API (backend has -365 to +365 days range)
   // Filter happens ONLY in frontend (useGuestPeriodFilter hook)
@@ -752,8 +755,10 @@ function AppContent() {
                guestPeriodPreset={guestPeriodPreset}
                guestCustomStartDate={guestCustomStartDate}
                guestCustomEndDate={guestCustomEndDate}
+               guestSelectedStatuses={guestSelectedStatuses}
                onGuestPeriodPresetChange={handleGuestPeriodPresetChange}
                onGuestCustomDateChange={handleGuestCustomDateChange}
+               onGuestStatusChange={setGuestSelectedStatuses}
              />
            )}
 

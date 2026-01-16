@@ -11,6 +11,7 @@ interface UseGuestPeriodFilterProps {
   customStartDate?: string;
   customEndDate?: string;
   searchTerm?: string;
+  selectedStatuses?: string[]; // Novo: filtro de status
 }
 
 /**
@@ -56,7 +57,7 @@ function sortGroupItems(items: ReservationWithDailyStatus[]): ReservationWithDai
 }
 
 /**
- * Hook para filtrar e agrupar reservas por período
+ * Hook para filtrar e agrupar reservas por período e status
  * Similar ao useMaintenanceFilters, mas focado em reservas
  */
 export function useGuestPeriodFilter({
@@ -66,6 +67,7 @@ export function useGuestPeriodFilter({
   customStartDate = '',
   customEndDate = '',
   searchTerm = '',
+  selectedStatuses = ['ALL'],
 }: UseGuestPeriodFilterProps) {
 
   // Calcular intervalo de datas baseado no preset
@@ -162,7 +164,29 @@ export function useGuestPeriodFilter({
       console.log('  ℹ️ Sem filtro de período - mostrando todos os grupos');
     }
 
-    // 2. Aplicar busca (filtrar items dentro dos grupos)
+    // 2. Aplicar filtro de status (filtrar items dentro dos grupos)
+    const shouldFilterByStatus = selectedStatuses && selectedStatuses.length > 0 && !selectedStatuses.includes('ALL');
+    
+    if (shouldFilterByStatus) {
+      console.log('  🎯 Aplicando filtro de status:', selectedStatuses);
+      const statusFilteredGroups = groups.map(group => ({
+        ...group,
+        items: group.items.filter(r => {
+          const dailyStatus = r.dailyStatus;
+          // Mapear status para os filtros
+          if (selectedStatuses.includes('CHECKIN') && dailyStatus === 'CHECKIN') return true;
+          if (selectedStatuses.includes('CHECKOUT') && dailyStatus === 'CHECKOUT') return true;
+          if (selectedStatuses.includes('INHOUSE') && dailyStatus === 'INHOUSE') return true;
+          return false;
+        })
+      })).filter(group => group.items.length > 0);
+      console.log('  ✅ Grupos após filtro de status:', statusFilteredGroups.length);
+      groups = statusFilteredGroups;
+    } else {
+      console.log('  ℹ️ Sem filtro de status - mostrando todos os status');
+    }
+
+    // 3. Aplicar busca (filtrar items dentro dos grupos)
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       console.log('  🔍 Aplicando busca:', term);
@@ -191,7 +215,7 @@ export function useGuestPeriodFilter({
     }
 
     return groups;
-  }, [staysAgendaGroups, shouldFilterByPeriod, periodStartDate, periodEndDate, searchTerm]);
+  }, [staysAgendaGroups, shouldFilterByPeriod, periodStartDate, periodEndDate, selectedStatuses, searchTerm]);
 
   return {
     filteredAgendaGroups,

@@ -9,6 +9,7 @@ import { AgendaGroup } from '../../services/staysDataMapper';
 import { SkeletonAgenda, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import PeriodFilter, { PeriodPreset } from './PeriodFilter';
+import StatusFilter, { ReservationStatus } from './StatusFilter';
 import { useGuestPeriodFilter } from '../../hooks/features/useGuestPeriodFilter';
 import { usePagination } from '../../hooks/features/usePagination';
 import { PaginationBar } from '../ui/PaginationBar';
@@ -29,8 +30,10 @@ interface GuestViewProps {
   guestPeriodPreset: PeriodPreset;
   guestCustomStartDate: string;
   guestCustomEndDate: string;
+  guestSelectedStatuses: string[];
   onGuestPeriodPresetChange: (preset: PeriodPreset) => void;
   onGuestCustomDateChange: (startDate: string, endDate: string) => void;
+  onGuestStatusChange: (statuses: string[]) => void;
 }
 
 // Normaliza o nome do hóspede para consistência na contagem
@@ -57,8 +60,10 @@ export const GuestView: React.FC<GuestViewProps> = ({
   guestPeriodPreset,
   guestCustomStartDate,
   guestCustomEndDate,
+  guestSelectedStatuses,
   onGuestPeriodPresetChange,
-  onGuestCustomDateChange
+  onGuestCustomDateChange,
+  onGuestStatusChange
 }) => {
   const getGridClass = () => {
     if (gridColumns === 2) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2';
@@ -66,18 +71,19 @@ export const GuestView: React.FC<GuestViewProps> = ({
     return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
   };
 
-  // Hook para filtrar e agrupar reservas por período
+  // Hook para filtrar e agrupar reservas por período e status
   const { filteredAgendaGroups } = useGuestPeriodFilter({
     staysReservations,
     staysAgendaGroups,
     periodPreset: guestPeriodPreset,
     customStartDate: guestCustomStartDate,
     customEndDate: guestCustomEndDate,
+    selectedStatuses: guestSelectedStatuses,
     searchTerm,
   });
 
   // Paginação: reset quando filtros mudarem
-  const resetTrigger = `${guestPeriodPreset}-${guestCustomStartDate}-${guestCustomEndDate}-${searchTerm}`;
+  const resetTrigger = `${guestPeriodPreset}-${guestCustomStartDate}-${guestCustomEndDate}-${guestSelectedStatuses.join(',')}-${searchTerm}`;
   const { paginatedItems: paginatedAgendaGroups, pagination } = usePagination({
     items: filteredAgendaGroups,
     initialItemsPerPage: 10,
@@ -154,15 +160,21 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
   return (
     <div className={viewMode === 'cards' ? "space-y-8" : "space-y-4"}>
-      {/* Filtro de Período - Somente para modos Cards e Lista */}
+      {/* Filtro de Período + Status - Somente para modos Cards e Lista */}
       {(viewMode === 'cards' || viewMode === 'list') && (
-        <PeriodFilter
-          selectedPreset={guestPeriodPreset}
-          customStartDate={guestCustomStartDate}
-          customEndDate={guestCustomEndDate}
-          onPresetChange={onGuestPeriodPresetChange}
-          onCustomDateChange={onGuestCustomDateChange}
-        />
+        <>
+          <PeriodFilter
+            selectedPreset={guestPeriodPreset}
+            customStartDate={guestCustomStartDate}
+            customEndDate={guestCustomEndDate}
+            onPresetChange={onGuestPeriodPresetChange}
+            onCustomDateChange={onGuestCustomDateChange}
+          />
+          <StatusFilter
+            selectedStatuses={guestSelectedStatuses as ReservationStatus[]}
+            onStatusChange={(statuses) => onGuestStatusChange(statuses as string[])}
+          />
+        </>
       )}
 
       {staysLoading ? (
