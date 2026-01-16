@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   CalendarClock, CalendarRange, LogIn, LogOut as LogOutIcon, Home, Languages,
-  FileX, EyeOff, DollarSign, Wrench, Repeat, FileCheck, CheckCircle2, AlertCircle, Baby
+  FileX, EyeOff, DollarSign, Wrench, Repeat, FileCheck, CheckCircle2, AlertCircle, Baby, Flag
 } from 'lucide-react';
 import { Reservation, Ticket } from '../../types';
 import { AgendaGroup } from '../../services/staysDataMapper';
@@ -14,7 +14,7 @@ import { useGuestPeriodFilter } from '../../hooks/features/useGuestPeriodFilter'
 import { usePagination } from '../../hooks/features/usePagination';
 import { PaginationBar } from '../ui/PaginationBar';
 import { storageService } from '../../services/storage';
-import { getReservationOverrideKey, parseLocalDate, formatDatePtBR } from '../../utils';
+import { getReservationOverrideKey, parseLocalDate, formatDatePtBR, getReservationCardColors } from '../../utils';
 
 interface GuestViewProps {
   staysReservations: Reservation[];
@@ -131,6 +131,8 @@ export const GuestView: React.FC<GuestViewProps> = ({
       hasChildren: override.hasChildren ?? reservation.hasBabies,
       earlyCheckIn: override.earlyCheckIn ?? reservation.earlyCheckIn,
       lateCheckOut: override.lateCheckOut ?? reservation.lateCheckOut,
+      specialAttention: override.specialAttention ?? reservation.specialAttention,
+      problemReported: override.problemReported ?? reservation.problemReported,
       maintenanceAck: {
         seen: !!override.maintenanceSeenAt,
         seenAt: override.maintenanceSeenAt,
@@ -244,15 +246,28 @@ export const GuestView: React.FC<GuestViewProps> = ({
                     // Task 43: Check if has children
                     const hasChildren = merged.hasChildren ?? false;
 
+                    // Task 59: Get Atenção and Problema states
+                    const hasProblema = merged.problemReported ?? false;
+                    const hasAtencao = merged.specialAttention ?? false;
+                    
+                    // Determine card status for color
+                    let cardStatus: 'checkin' | 'checkout' | 'inhouse' | 'default' = 'default';
+                    if (dailyStatus === 'CHECKIN') {
+                      cardStatus = 'checkin';
+                    } else if (dailyStatus === 'CHECKOUT') {
+                      cardStatus = 'checkout';
+                    } else if (dailyStatus === 'INHOUSE') {
+                      cardStatus = 'inhouse';
+                    }
+                    
+                    // Get dynamic colors based on priority: Problema > Atenção > Status
+                    const colors = getReservationCardColors(hasProblema, hasAtencao, cardStatus);
+
                     return (
                       <div
                         key={`${group.date}-${reservation.id}-${idx}`}
                         onClick={() => setSelectedReservation(reservation)}
-                        className={`bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden flex flex-col min-w-0 ${
-                          dailyStatus === 'CHECKIN' ? 'ring-2 ring-green-500 bg-green-50/20' :
-                          dailyStatus === 'CHECKOUT' ? 'ring-2 ring-orange-500 bg-orange-50/20' :
-                          dailyStatus === 'INHOUSE' ? 'ring-1 ring-blue-300 bg-blue-50/20' : ''
-                        }`}
+                        className={`p-4 rounded-lg border shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden flex flex-col min-w-0 ${colors.bg} ${colors.border} ${colors.bgHover}`}
                       >
                         {dailyStatus === 'CHECKIN' && <div className="absolute top-0 right-0 bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider flex items-center gap-1"><LogIn size={10} /> CHECK-IN</div>}
                         {dailyStatus === 'CHECKOUT' && <div className="absolute top-0 right-0 bg-orange-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider flex items-center gap-1"><LogOutIcon size={10} /> CHECK-OUT</div>}
@@ -278,6 +293,18 @@ export const GuestView: React.FC<GuestViewProps> = ({
                         </div>
 
                         <div className="flex flex-wrap gap-1 mb-2">
+                          {/* Task 59: Atenção and Problema indicators */}
+                          {hasProblema && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-bold rounded uppercase">
+                              PROBLEMA
+                            </span>
+                          )}
+                          {hasAtencao && !hasProblema && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-purple-600 text-white text-[9px] font-bold rounded uppercase">
+                              ATENÇÃO
+                            </span>
+                          )}
+                          
                           {/* Task 40: Docs indicator */}
                           {!docsComplete && (
                             <span className="flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-700 text-[9px] font-bold rounded uppercase">
@@ -413,11 +440,28 @@ export const GuestView: React.FC<GuestViewProps> = ({
                 const lateCheckOut = merged.lateCheckOut;
                 const hasChildren = merged.hasChildren ?? false;
 
+                // Task 59: Get Atenção and Problema states
+                const hasProblema = merged.problemReported ?? false;
+                const hasAtencao = merged.specialAttention ?? false;
+                
+                // Determine card status for color
+                let cardStatus: 'checkin' | 'checkout' | 'inhouse' | 'default' = 'default';
+                if (dailyStatus === 'CHECKIN') {
+                  cardStatus = 'checkin';
+                } else if (dailyStatus === 'CHECKOUT') {
+                  cardStatus = 'checkout';
+                } else if (dailyStatus === 'INHOUSE') {
+                  cardStatus = 'inhouse';
+                }
+                
+                // Get dynamic colors based on priority: Problema > Atenção > Status
+                const colors = getReservationCardColors(hasProblema, hasAtencao, cardStatus);
+
                 return (
                   <div
                     key={`${group.date}-${reservation.id}-${idx}`}
                     onClick={() => setSelectedReservation(reservation)}
-                    className="flex items-center justify-between p-3 transition-colors bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 relative"
+                    className={`flex items-center justify-between p-3 transition-colors border rounded-lg cursor-pointer relative ${colors.bg} ${colors.border} ${colors.bgHover}`}
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       {/* Badge de tipo - igual aos Cards */}
@@ -443,6 +487,10 @@ export const GuestView: React.FC<GuestViewProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1 flex-wrap">
+                        {/* Task 59: Atenção and Problema indicators */}
+                        {hasProblema && <div title="Problema reportado"><Flag size={12} className="text-red-600 fill-red-600" /></div>}
+                        {hasAtencao && !hasProblema && <div title="Atenção especial"><Flag size={12} className="text-purple-600" /></div>}
+                        
                         {/* Task 40: Docs indicator */}
                         {!docsComplete && <div title="Documentação pendente"><FileX size={12} className="text-red-500" /></div>}
                         {docsComplete && <div title="Documentos completos"><FileCheck size={12} className="text-green-500" /></div>}

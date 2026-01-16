@@ -8,7 +8,7 @@ import {
  Crown, Clock, ChevronRight, Phone, Mail, Filter, ArrowUpDown,
  LogIn, LogOut, Home, X, FileCheck, CheckCircle2, Baby, AlertCircle
 } from 'lucide-react';
-import { formatCurrency, parseLocalDate, formatDatePtBR, getTodayBrazil, isToday as checkIsToday, getMaintenanceItemKey } from '../utils';
+import { formatCurrency, parseLocalDate, formatDatePtBR, getTodayBrazil, isToday as checkIsToday, getMaintenanceItemKey, getReservationCardColors } from '../utils';
 import { getDetailedFinancials, getCalendar } from '../services/staysApiService';
 import { storageService } from '../services/storage';
 import ReservationDetailModal from './ReservationDetailModal';
@@ -637,17 +637,46 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
                     console.log('hasChildren:', hasChildren);
                     console.log('==============================');
                     
+                    // Task 59: Get Atenção and Problema states
+                    const hasProblema = override?.problemReported ?? res.problemReported ?? false;
+                    const hasAtencao = override?.specialAttention ?? res.specialAttention ?? false;
+                    
+                    // Determine card status for color
+                    let cardStatus: 'checkin' | 'checkout' | 'inhouse' | 'default' = 'default';
+                    if (checkIsToday(res.checkInDate)) {
+                      cardStatus = 'checkin';
+                    } else if (checkIsToday(res.checkOutDate)) {
+                      cardStatus = 'checkout';
+                    } else if (isCurrent) {
+                      cardStatus = 'inhouse';
+                    }
+                    
+                    // Get dynamic colors based on priority: Problema > Atenção > Status
+                    const colors = getReservationCardColors(hasProblema, hasAtencao, cardStatus);
+                    
                     return (
                       <div 
                         key={res.id} 
                         onClick={() => setSelectedReservation(res)}
-                        className={`p-4 flex flex-col md:flex-row md:items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer ${isCurrent ? 'bg-blue-50/50' : ''}`}
+                        className={`p-4 flex flex-col md:flex-row md:items-center justify-between transition-colors cursor-pointer border-l-4 ${colors.bg} ${colors.border} ${colors.bgHover}`}
                       >
                         <div className="flex items-start gap-3 flex-1">
                           <div className={`mt-1 w-2 h-2 rounded-full ${isFuture ? 'bg-green-500' : isCurrent ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="text-sm font-bold text-gray-900">{res.propertyCode}</p>
+                              
+                              {/* Task 59: Atenção and Problema indicators */}
+                              {hasProblema && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-red-600 text-white rounded uppercase font-bold">
+                                  PROBLEMA
+                                </span>
+                              )}
+                              {hasAtencao && !hasProblema && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-purple-600 text-white rounded uppercase font-bold">
+                                  ATENÇÃO
+                                </span>
+                              )}
                               
                               {/* Task 40: Docs indicator */}
                               {!docsComplete && (

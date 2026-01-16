@@ -389,3 +389,76 @@ export const resolveReservationForCheckoutTicket = (
   logs.debugCandidates = candidates.slice(0, 5); // Primeiros 5 para debugging
   return { reservation: null, logs };
 };
+
+/**
+ * Determina as classes de cor do card de reserva baseado em prioridade:
+ * 1. Problema (vermelho) - maior prioridade
+ * 2. Atenção (roxo) - média prioridade
+ * 3. Status padrão (verde/laranja/azul) - menor prioridade
+ * 
+ * Retorna objeto com classes CSS para background, texto e borda
+ */
+export interface CardColorClasses {
+  bg: string;
+  text: string;
+  border: string;
+  bgHover: string;
+}
+
+export const getReservationCardColors = (
+  hasProblema: boolean,
+  hasAtencao: boolean,
+  status: 'checkin' | 'checkout' | 'inhouse' | 'default'
+): CardColorClasses => {
+  // Prioridade 1: Problema
+  if (hasProblema) {
+    return {
+      bg: 'bg-red-50',
+      text: 'text-red-900',
+      border: 'border-red-200',
+      bgHover: 'hover:bg-red-100'
+    };
+  }
+
+  // Prioridade 2: Atenção
+  if (hasAtencao) {
+    return {
+      bg: 'bg-purple-50',
+      text: 'text-purple-900',
+      border: 'border-purple-200',
+      bgHover: 'hover:bg-purple-100'
+    };
+  }
+
+  // Prioridade 3: Status padrão
+  switch (status) {
+    case 'checkin':
+      return {
+        bg: 'bg-green-50',
+        text: 'text-green-900',
+        border: 'border-green-200',
+        bgHover: 'hover:bg-green-100'
+      };
+    case 'checkout':
+      return {
+        bg: 'bg-orange-50',
+        text: 'text-orange-900',
+        border: 'border-orange-200',
+        bgHover: 'hover:bg-orange-100'
+      };
+    case 'inhouse':
+      return {
+        bg: 'bg-blue-50',
+        text: 'text-blue-900',
+        border: 'border-blue-200',
+        bgHover: 'hover:bg-blue-100'
+      };
+    default:
+      return {
+        bg: 'bg-white',
+        text: 'text-gray-900',
+        border: 'border-gray-200',
+        bgHover: 'hover:bg-gray-50'
+      };
+  }
+};
