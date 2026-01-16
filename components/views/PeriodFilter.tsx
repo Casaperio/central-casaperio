@@ -78,7 +78,10 @@ const PeriodFilter: React.FC<PeriodFilterProps> = ({
               <input
                 type="date"
                 value={localStartDate}
-                onChange={(e) => setLocalStartDate(e.target.value)}
+                onChange={(e) => {
+                  console.log('📅 [PERIOD FILTER] Data inicial mudou:', e.target.value);
+                  setLocalStartDate(e.target.value);
+                }}
                 onBlur={handleDateChange}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
@@ -90,7 +93,10 @@ const PeriodFilter: React.FC<PeriodFilterProps> = ({
               <input
                 type="date"
                 value={localEndDate}
-                onChange={(e) => setLocalEndDate(e.target.value)}
+                onChange={(e) => {
+                  console.log('📅 [PERIOD FILTER] Data final mudou:', e.target.value);
+                  setLocalEndDate(e.target.value);
+                }}
                 onBlur={handleDateChange}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500"
               />

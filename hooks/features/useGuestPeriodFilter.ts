@@ -11,6 +11,7 @@ interface UseGuestPeriodFilterProps {
   customStartDate?: string;
   customEndDate?: string;
   searchTerm?: string;
+  selectedStatuses?: string[]; // Novo: filtro de status
 }
 
 /**
@@ -56,7 +57,7 @@ function sortGroupItems(items: ReservationWithDailyStatus[]): ReservationWithDai
 }
 
 /**
- * Hook para filtrar e agrupar reservas por período
+ * Hook para filtrar e agrupar reservas por período e status
  * Similar ao useMaintenanceFilters, mas focado em reservas
  */
 export function useGuestPeriodFilter({
@@ -66,6 +67,7 @@ export function useGuestPeriodFilter({
   customStartDate = '',
   customEndDate = '',
   searchTerm = '',
+  selectedStatuses = ['ALL'],
 }: UseGuestPeriodFilterProps) {
 
   // Calcular intervalo de datas baseado no preset
@@ -88,7 +90,7 @@ export function useGuestPeriodFilter({
 
     switch (periodPreset) {
       case 'today':
-        // Hoje: apenas hoje
+        // Hoje: apenas o dia de hoje
         startDate = new Date(now);
         endDate = new Date(now);
         break;
@@ -138,23 +140,57 @@ export function useGuestPeriodFilter({
 
   // Filtrar AgendaGroups (ÚNICA FONTE DE VERDADE para Cards e Lista)
   const filteredAgendaGroups = useMemo(() => {
+    console.log('🔍 [GUEST PERIOD FILTER] Filtrando agenda groups');
+    console.log('  📊 Total de grupos recebidos:', staysAgendaGroups.length);
+    console.log('  📅 Período:', shouldFilterByPeriod ? `${periodStartDate?.toISOString().split('T')[0]} → ${periodEndDate?.toISOString().split('T')[0]}` : 'SEM FILTRO');
+    
     let groups = staysAgendaGroups;
 
     // 1. Aplicar filtro de período nos grupos por data
     if (shouldFilterByPeriod && periodStartDate && periodEndDate) {
-      groups = groups.filter(group => {
+      const filteredGroups = groups.filter(group => {
+        // Parse group date correctly (format: YYYY-MM-DD)
         const groupDate = new Date(group.date + 'T00:00:00');
         groupDate.setHours(0, 0, 0, 0);
 
         // Intervalo inclusivo: [startDate, endDate]
-        return groupDate >= periodStartDate && groupDate <= periodEndDate;
+        const isInRange = groupDate >= periodStartDate && groupDate <= periodEndDate;
+        return isInRange;
       });
+      
+      console.log('  ✅ Grupos após filtro de período:', filteredGroups.length);
+      groups = filteredGroups;
+    } else {
+      console.log('  ℹ️ Sem filtro de período - mostrando todos os grupos');
     }
 
-    // 2. Aplicar busca (filtrar items dentro dos grupos)
+    // 2. Aplicar filtro de status (filtrar items dentro dos grupos)
+    const shouldFilterByStatus = selectedStatuses && selectedStatuses.length > 0 && !selectedStatuses.includes('ALL');
+    
+    if (shouldFilterByStatus) {
+      console.log('  🎯 Aplicando filtro de status:', selectedStatuses);
+      const statusFilteredGroups = groups.map(group => ({
+        ...group,
+        items: group.items.filter(r => {
+          const dailyStatus = r.dailyStatus;
+          // Mapear status para os filtros
+          if (selectedStatuses.includes('CHECKIN') && dailyStatus === 'CHECKIN') return true;
+          if (selectedStatuses.includes('CHECKOUT') && dailyStatus === 'CHECKOUT') return true;
+          if (selectedStatuses.includes('INHOUSE') && dailyStatus === 'INHOUSE') return true;
+          return false;
+        })
+      })).filter(group => group.items.length > 0);
+      console.log('  ✅ Grupos após filtro de status:', statusFilteredGroups.length);
+      groups = statusFilteredGroups;
+    } else {
+      console.log('  ℹ️ Sem filtro de status - mostrando todos os status');
+    }
+
+    // 3. Aplicar busca (filtrar items dentro dos grupos)
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      groups = groups.map(group => ({
+      console.log('  🔍 Aplicando busca:', term);
+      const searchedGroups = groups.map(group => ({
         ...group,
         items: group.items.filter(r =>
           r.guestName.toLowerCase().includes(term) ||
@@ -162,6 +198,8 @@ export function useGuestPeriodFilter({
           r.channel?.toLowerCase().includes(term)
         )
       })).filter(group => group.items.length > 0);
+      console.log('  ✅ Grupos após busca:', searchedGroups.length);
+      groups = searchedGroups;
     }
 
     // 3. Ordenar items dentro de cada grupo por status
@@ -171,8 +209,13 @@ export function useGuestPeriodFilter({
       items: sortGroupItems(group.items)
     }));
 
+    console.log('  🎯 RESULTADO FINAL:', groups.length, 'grupos');
+    if (groups.length > 0) {
+      console.log('  📋 Primeiros 3 grupos:', groups.slice(0, 3).map(g => ({ date: g.date, items: g.items.length })));
+    }
+
     return groups;
-  }, [staysAgendaGroups, shouldFilterByPeriod, periodStartDate, periodEndDate, searchTerm]);
+  }, [staysAgendaGroups, shouldFilterByPeriod, periodStartDate, periodEndDate, selectedStatuses, searchTerm]);
 
   return {
     filteredAgendaGroups,

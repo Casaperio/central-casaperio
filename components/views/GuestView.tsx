@@ -9,7 +9,10 @@ import { AgendaGroup } from '../../services/staysDataMapper';
 import { SkeletonAgenda, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import PeriodFilter, { PeriodPreset } from './PeriodFilter';
+import StatusFilter, { ReservationStatus } from './StatusFilter';
 import { useGuestPeriodFilter } from '../../hooks/features/useGuestPeriodFilter';
+import { usePagination } from '../../hooks/features/usePagination';
+import { PaginationBar } from '../ui/PaginationBar';
 import { storageService } from '../../services/storage';
 import { getReservationOverrideKey, parseLocalDate, formatDatePtBR } from '../../utils';
 
@@ -27,8 +30,10 @@ interface GuestViewProps {
   guestPeriodPreset: PeriodPreset;
   guestCustomStartDate: string;
   guestCustomEndDate: string;
+  guestSelectedStatuses: string[];
   onGuestPeriodPresetChange: (preset: PeriodPreset) => void;
   onGuestCustomDateChange: (startDate: string, endDate: string) => void;
+  onGuestStatusChange: (statuses: string[]) => void;
 }
 
 // Normaliza o nome do hóspede para consistência na contagem
@@ -55,8 +60,10 @@ export const GuestView: React.FC<GuestViewProps> = ({
   guestPeriodPreset,
   guestCustomStartDate,
   guestCustomEndDate,
+  guestSelectedStatuses,
   onGuestPeriodPresetChange,
-  onGuestCustomDateChange
+  onGuestCustomDateChange,
+  onGuestStatusChange
 }) => {
   const getGridClass = () => {
     if (gridColumns === 2) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2';
@@ -64,14 +71,23 @@ export const GuestView: React.FC<GuestViewProps> = ({
     return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
   };
 
-  // Hook para filtrar e agrupar reservas por período
+  // Hook para filtrar e agrupar reservas por período e status
   const { filteredAgendaGroups } = useGuestPeriodFilter({
     staysReservations,
     staysAgendaGroups,
     periodPreset: guestPeriodPreset,
     customStartDate: guestCustomStartDate,
     customEndDate: guestCustomEndDate,
+    selectedStatuses: guestSelectedStatuses,
     searchTerm,
+  });
+
+  // Paginação: reset quando filtros mudarem
+  const resetTrigger = `${guestPeriodPreset}-${guestCustomStartDate}-${guestCustomEndDate}-${guestSelectedStatuses.join(',')}-${searchTerm}`;
+  const { paginatedItems: paginatedAgendaGroups, pagination } = usePagination({
+    items: filteredAgendaGroups,
+    initialItemsPerPage: 10,
+    resetTrigger,
   });
 
   // Task 40-43: Carregar overrides em lote para mostrar tags nos cards
@@ -144,15 +160,21 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
   return (
     <div className={viewMode === 'cards' ? "space-y-8" : "space-y-4"}>
-      {/* Filtro de Período - Somente para modos Cards e Lista */}
+      {/* Filtro de Período + Status - Somente para modos Cards e Lista */}
       {(viewMode === 'cards' || viewMode === 'list') && (
-        <PeriodFilter
-          selectedPreset={guestPeriodPreset}
-          customStartDate={guestCustomStartDate}
-          customEndDate={guestCustomEndDate}
-          onPresetChange={onGuestPeriodPresetChange}
-          onCustomDateChange={onGuestCustomDateChange}
-        />
+        <>
+          <PeriodFilter
+            selectedPreset={guestPeriodPreset}
+            customStartDate={guestCustomStartDate}
+            customEndDate={guestCustomEndDate}
+            onPresetChange={onGuestPeriodPresetChange}
+            onCustomDateChange={onGuestCustomDateChange}
+          />
+          <StatusFilter
+            selectedStatuses={guestSelectedStatuses as ReservationStatus[]}
+            onStatusChange={(statuses) => onGuestStatusChange(statuses as string[])}
+          />
+        </>
       )}
 
       {staysLoading ? (
@@ -181,12 +203,13 @@ export const GuestView: React.FC<GuestViewProps> = ({
           onItemClick={setSelectedReservation}
         />
       ) : viewMode === 'cards' ? (
-        filteredAgendaGroups.length === 0 ? (
-          <div className="p-8 text-center text-gray-400 bg-white border border-gray-200 border-dashed rounded-lg">
-            Nenhuma reserva encontrada.
-          </div>
-        ) : (
-          filteredAgendaGroups.map(group => (
+        <>
+          {filteredAgendaGroups.length === 0 ? (
+            <div className="p-8 text-center text-gray-400 bg-white border border-gray-200 border-dashed rounded-lg">
+              Nenhuma reserva encontrada.
+            </div>
+          ) : (
+            paginatedAgendaGroups.map(group => (
             <div key={group.date} className="animate-fade-in">
               <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${group.isToday ? 'text-blue-600' : 'text-gray-600'}`}>
                 <CalendarClock size={16}/>
@@ -199,7 +222,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
                 </div>
               ) : (
                 <div className={`grid gap-4 ${getGridClass()}`}>
-                  {group.items.map(reservation => {
+                  {group.items.map((reservation, idx) => {
                     const dailyStatus = reservation.dailyStatus;
                     const reservationCount = guestReservationCount.get(normalizeGuestName(reservation.guestName)) || 0;
 
@@ -223,7 +246,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
                     return (
                       <div
-                        key={reservation.id}
+                        key={`${group.date}-${reservation.id}-${idx}`}
                         onClick={() => setSelectedReservation(reservation)}
                         className={`bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden flex flex-col min-w-0 ${
                           dailyStatus === 'CHECKIN' ? 'ring-2 ring-green-500 bg-green-50/20' :
@@ -353,15 +376,20 @@ export const GuestView: React.FC<GuestViewProps> = ({
               )}
             </div>
           ))
-        )
+        )}
+
+        {/* Barra de paginação inferior */}
+        <PaginationBar pagination={pagination} />
+        </>
       ) : (
-        // Modo Lista - Usa a mesma fonte dos Cards (filteredAgendaGroups)
-        filteredAgendaGroups.length === 0 ? (
-          <div className="p-8 text-center text-gray-400 bg-white border border-gray-200 border-dashed rounded-lg">
-            Nenhuma reserva encontrada.
-          </div>
-        ) : (
-          filteredAgendaGroups.map(group => (
+        // Modo Lista - Usa a mesma fonte dos Cards com paginação
+        <>
+          {filteredAgendaGroups.length === 0 ? (
+            <div className="p-8 text-center text-gray-400 bg-white border border-gray-200 border-dashed rounded-lg">
+              Nenhuma reserva encontrada.
+            </div>
+          ) : (
+            paginatedAgendaGroups.map(group => (
             <div key={group.date} className="space-y-2 animate-fade-in">
               {/* Header do grupo de data - igual aos Cards */}
               <h3 className={`text-sm font-bold uppercase tracking-wider mb-2 flex items-center gap-2 ${group.isToday ? 'text-blue-600' : 'text-gray-600'}`}>
@@ -371,7 +399,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
               </h3>
 
               {/* Lista de reservas do grupo - mesma ordem dos Cards */}
-              {group.items.map(reservation => {
+              {group.items.map((reservation, idx) => {
                 const dailyStatus = reservation.dailyStatus;
                 const reservationCount = guestReservationCount.get(normalizeGuestName(reservation.guestName)) || 0;
 
@@ -387,7 +415,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
                 return (
                   <div
-                    key={reservation.id}
+                    key={`${group.date}-${reservation.id}-${idx}`}
                     onClick={() => setSelectedReservation(reservation)}
                     className="flex items-center justify-between p-3 transition-colors bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 relative"
                   >
@@ -467,7 +495,11 @@ export const GuestView: React.FC<GuestViewProps> = ({
               })}
             </div>
           ))
-        )
+          )}
+
+          {/* Barra de paginação inferior */}
+          <PaginationBar pagination={pagination} />
+        </>
       )}
     </div>
   );

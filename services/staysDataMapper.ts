@@ -49,6 +49,16 @@ export function mapApiStatusToDailyStatus(status: 'checkin' | 'checkout' | 'stay
 }
 
 /**
+ * Formats a Date object to YYYY-MM-DD string
+ */
+function formatDateStr(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Maps dashboard GuestData to Reservation
  */
 export function mapGuestToReservation(guest: GuestData): ReservationWithDailyStatus {
@@ -230,54 +240,43 @@ function sortByStatus(items: ReservationWithDailyStatus[]): ReservationWithDaily
 
 /**
  * Converts full dashboard weekData to agenda groups
- * ALWAYS returns exactly 7 days starting from today
+ * Returns ALL days from backend weekData (typically ±365 days = 731 days)
  * Items are sorted by status: CHECKOUT first, then CHECKIN, then INHOUSE
  */
 export function mapDashboardToAgendaGroups(dashboard: DashboardResponse): AgendaGroup[] {
-  const sevenDays = generateSevenDays();
+  console.log('🔄 [MAPPER] Criando agenda groups de weekData');
+  console.log('  📊 Total de dias no weekData:', dashboard.weekData.length);
 
-  // Create a map of API data by date for quick lookup
-  const apiDataByDate = new Map<string, DayData>();
-  dashboard.weekData.forEach(day => {
-    apiDataByDate.set(day.date, day);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = formatDateStr(today);
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = formatDateStr(tomorrow);
+
+  // Map ALL days from backend weekData to agenda groups
+  const groups = dashboard.weekData.map((dayData) => {
+    const dateStr = dayData.date;
+    const isToday = dateStr === todayStr;
+    const isTomorrow = dateStr === tomorrowStr;
+
+    // Map guests to reservations, sorted by status (CHECKOUT first)
+    const mappedItems = dayData.guests.map(guest => mapGuestToReservation(guest));
+
+    return {
+      date: dateStr,
+      label: formatDateLabel(dateStr, isToday, isTomorrow),
+      isToday,
+      items: sortByStatus(mappedItems),
+    };
   });
 
-  // Generate agenda groups for exactly 7 days starting from today
-  return sevenDays.map((dateStr, index) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  console.log('  ✅ Grupos criados:', groups.length);
+  console.log('  📅 Primeiro grupo:', groups[0]?.date);
+  console.log('  📅 Último grupo:', groups[groups.length - 1]?.date);
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const dayDate = new Date(dateStr + 'T12:00:00');
-    dayDate.setHours(0, 0, 0, 0);
-
-    const isToday = index === 0;
-    const isTomorrow = index === 1;
-
-    // Check if we have API data for this day
-    const apiDay = apiDataByDate.get(dateStr);
-
-    if (apiDay) {
-      // Use API data, sorted by status (CHECKOUT first)
-      const mappedItems = apiDay.guests.map(guest => mapGuestToReservation(guest));
-      return {
-        date: dateStr,
-        label: formatDateLabel(dateStr, isToday, isTomorrow),
-        isToday,
-        items: sortByStatus(mappedItems),
-      };
-    } else {
-      // Create empty day
-      return {
-        date: dateStr,
-        label: formatDateLabel(dateStr, isToday, isTomorrow),
-        isToday,
-        items: [],
-      };
-    }
-  });
+  return groups;
 }
 
 /**

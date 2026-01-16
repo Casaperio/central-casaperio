@@ -97,6 +97,16 @@ import BoardDetail from './components/BoardDetail';
 import FieldApp from './components/FieldApp';
 import InboxPanel from './components/InboxPanel';
 
+/**
+ * Formats a Date object to YYYY-MM-DD string for API calls
+ */
+function formatDateForApi(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // AppContent - Main app logic wrapped in contexts
 function AppContent() {
   // Context hooks
@@ -269,21 +279,6 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(true); // Desktop state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Mobile state
 
-  // Stays API Data (from stays-api backend)
-  const {
-    agendaGroups: staysAgendaGroups,
-    reservations: staysReservations,
-    calendarData: staysCalendarData,
-    syncStatus: staysSyncStatus,
-    loading: staysLoading,
-    isFetching: staysRefetching,
-    error: staysError,
-    refresh: refreshStaysData,
-  } = useStaysData();
-
-  // Combine loading states
-  const isGlobalLoading = staysLoading || staysRefetching;
-
   // Calendar UI State
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
@@ -306,10 +301,31 @@ function AppContent() {
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
 
-  // Guest Period Filter (default: 'all' - sem filtro)
-  const [guestPeriodPreset, setGuestPeriodPreset] = useState<PeriodPreset>('all');
+  // Guest Period Filter (default: '7days' - próximos 7 dias a partir de hoje)
+  const [guestPeriodPreset, setGuestPeriodPreset] = useState<PeriodPreset>('7days');
   const [guestCustomStartDate, setGuestCustomStartDate] = useState<string>('');
   const [guestCustomEndDate, setGuestCustomEndDate] = useState<string>('');
+
+  // Guest Status Filter (default: ['ALL'] - todos os status)
+  const [guestSelectedStatuses, setGuestSelectedStatuses] = useState<string[]>(['ALL']);
+
+  // Stays API Data (from stays-api backend)
+  // STRATEGY: Fetch ALL data from API (backend has -365 to +365 days range)
+  // Filter happens ONLY in frontend (useGuestPeriodFilter hook)
+  // This ensures we always have all data available and filtering is instant
+  const {
+    agendaGroups: staysAgendaGroups,
+    reservations: staysReservations,
+    calendarData: staysCalendarData,
+    syncStatus: staysSyncStatus,
+    loading: staysLoading,
+    isFetching: staysRefetching,
+    error: staysError,
+    refresh: refreshStaysData,
+  } = useStaysData();
+
+  // Combine loading states
+  const isGlobalLoading = staysLoading || staysRefetching;
 
   // Initialize Firebase on app mount
   useEffect(() => {
@@ -342,6 +358,9 @@ function AppContent() {
   }, [currentUser]);
 
   // New Reservation Detector Hook
+  // Create a signature from filter state to detect changes and reset detector
+  const filterSignature = `${guestPeriodPreset}-${guestCustomStartDate}-${guestCustomEndDate}`;
+  
   useNewReservationDetector({
     staysReservations,
     currentUser,
@@ -355,6 +374,7 @@ function AppContent() {
     },
     addLog,
     addNotification,
+    filterSignature, // Reset detector when filter changes to prevent false alerts
   });
 
   // Ticket Notifications Hook
@@ -735,8 +755,10 @@ function AppContent() {
                guestPeriodPreset={guestPeriodPreset}
                guestCustomStartDate={guestCustomStartDate}
                guestCustomEndDate={guestCustomEndDate}
+               guestSelectedStatuses={guestSelectedStatuses}
                onGuestPeriodPresetChange={handleGuestPeriodPresetChange}
                onGuestCustomDateChange={handleGuestCustomDateChange}
+               onGuestStatusChange={setGuestSelectedStatuses}
              />
            )}
 
