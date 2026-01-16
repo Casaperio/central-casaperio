@@ -11,5 +11,5 @@ export const env = {
   VITE_STAYS_BASE_URL: "https://casap.stays.net/api/v1",
   VITE_STAYS_AUTH_URL: "https://casap.stays.net/oauth/token",
   VITE_API_KEY: "c04d89b3d57aebfa9f81942d39984773",
-  VITE_API_BASE_URL: "https://stays-api.onrender.com"
+  VITE_API_BASE_URL: "https://casape-api-latest.onrender.com"
 };
