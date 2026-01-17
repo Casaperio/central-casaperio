@@ -9,6 +9,7 @@ import { TypeFilter } from './TypeFilter';
 import PeriodFilter from './PeriodFilter';
 import { parseLocalDate, formatDatePtBR, isToday, isTomorrow } from '../../utils';
 import { useQueryClient } from '@tanstack/react-query';
+import { storageService } from '../../services/storage';
 
 interface MaintenanceViewProps {
   tickets: Ticket[];
@@ -95,31 +96,41 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
     setSelectedTicket(ticket);
   };
 
-  const handleCheckoutCardClick = (reservation: any) => {
-    // Task 33 + 34: Ao clicar em card de checkout virtual, criar ticket virtual
-    // e abrir o TicketDetailModal (modal simples) com dados operacionais
-    const virtualTicket: Ticket = {
-      id: `virtual-checkout-${reservation.id}`,
-      propertyCode: reservation.propertyCode,
-      propertyName: reservation.propertyName || reservation.propertyCode,
-      priority: 'Alta',
-      serviceType: 'Limpeza de Check-out',
-      description: `Limpeza de check-out automática - Hóspede: ${reservation.guestName}`,
-      desiredDate: reservation.checkOutDate,
-      guestAuth: false,
-      status: 'Aberto' as TicketStatus,
-      createdBy: 'Sistema',
-      createdByName: 'Automação de Check-out',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      reservationId: reservation.id,
-      isCheckoutTicket: true,
-      category: 'maintenance' as const,
-      expenses: [],
-      _isVirtual: true, // Flag especial para indicar que é virtual
-    } as any;
+  const handleCheckoutCardClick = async (reservation: any) => {
+    // Task 33 + 34: Ao clicar em card de checkout virtual, buscar ticket real existente primeiro
+    // Se existir, abrir o ticket real; senão, criar ticket virtual temporário
+    
+    // Buscar ticket real existente
+    const existingTicket = await storageService.tickets.findByReservation(reservation.id);
+    
+    if (existingTicket) {
+      // Ticket já existe - abrir o ticket real
+      setSelectedTicket(existingTicket);
+    } else {
+      // Criar ticket virtual temporário
+      const virtualTicket: Ticket = {
+        id: `virtual-checkout-${reservation.id}`,
+        propertyCode: reservation.propertyCode,
+        propertyName: reservation.propertyName || reservation.propertyCode,
+        priority: 'Alta',
+        serviceType: 'Limpeza de Check-out',
+        description: `Limpeza de check-out automática - Hóspede: ${reservation.guestName}`,
+        desiredDate: reservation.checkOutDate,
+        guestAuth: false,
+        status: 'Aberto' as TicketStatus,
+        createdBy: 'Sistema',
+        createdByName: 'Automação de Check-out',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        reservationId: reservation.id,
+        isCheckoutTicket: true,
+        category: 'maintenance' as const,
+        expenses: [],
+        _isVirtual: true, // Flag especial para indicar que é virtual
+      } as any;
 
-    setSelectedTicket(virtualTicket);
+      setSelectedTicket(virtualTicket);
+    }
   };
 
   if (viewMode === 'calendar') {
@@ -268,11 +279,6 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                               'bg-green-50 text-green-700'}`}>
                             {ticket.status}
                           </span>
-                          {ticket.isCheckoutTicket && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700">
-                              Limpeza de Check-out
-                            </span>
-                          )}
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${ticket.priority === 'Urgente' ? 'border-red-100 text-red-600 bg-red-50' : 'border-gray-100 text-gray-500 bg-gray-50'}`}>
                             {ticket.priority}
                           </span>

@@ -91,7 +91,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
      colorClass = 'bg-orange-50 text-orange-700 border-orange-200';
    }
    // Prioridade 2: Status do ticket
-   else if (t.status === TicketStatus.DONE || t.status === TicketStatus.COMPLETED) {
+   else if (t.status === TicketStatus.DONE) {
      colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
    }
    else if (t.status === TicketStatus.IN_PROGRESS) {

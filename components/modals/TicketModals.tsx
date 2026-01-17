@@ -102,50 +102,63 @@ const TicketModals: React.FC<TicketModalsProps> = ({
   const isVirtual = selectedTicket && (selectedTicket as any)._isVirtual === true;
 
   if (isVirtual && selectedTicket) {
-    // Criar ticket real no Firebase primeiro
-    const realTicketId = generateId();
+    // Buscar ticket real existente primeiro
+    const existingTicket = selectedTicket.reservationId 
+      ? await storageService.tickets.findByReservation(selectedTicket.reservationId)
+      : null;
+
     const updates: any = { status, updatedAt: Date.now() };
     if (status === 'Concluído' as TicketStatus) {
       updates.completedDate = date;
-      if (completionReport) updates.completionReport = completionReport; // Task 38
+      if (completionReport) updates.completionReport = completionReport;
     }
     if (status === 'Em Andamento' as TicketStatus && startedAt) updates.startedAt = startedAt;
 
-    const realTicket: Ticket = {
-      id: realTicketId,
-      propertyCode: selectedTicket.propertyCode,
-      propertyName: selectedTicket.propertyName,
-      priority: selectedTicket.priority,
-      serviceType: selectedTicket.serviceType,
-      description: selectedTicket.description,
-      desiredDate: selectedTicket.desiredDate,
-      scheduledDate: selectedTicket.scheduledDate,
-      guestAuth: selectedTicket.guestAuth,
-      status: updates.status,
-      assignee: selectedTicket.assignee,
-      createdBy: 'Sistema',
-      createdByName: 'Automação de Check-out',
-      createdAt: Date.now(),
-      updatedAt: updates.updatedAt,
-      completedDate: updates.completedDate,
-      startedAt: updates.startedAt,
-      completionReport: updates.completionReport, // Task 38
-      reservationId: selectedTicket.reservationId,
-      isCheckoutTicket: true,
-      category: 'maintenance',
-      expenses: [],
-    };
+    if (existingTicket) {
+      // Ticket já existe - apenas atualizar
+      await storageService.tickets.update({ id: existingTicket.id, ...updates } as any);
+      addLog('Chamado', `Atualizou status para ${status} no chamado de checkout`);
+      addNotification('Chamado Atualizado', `Status alterado para ${status}`, 'info');
+      setSelectedTicket((prev: Ticket | null) => (prev ? { ...prev, ...updates, id: existingTicket.id, _isVirtual: false } : null));
+    } else {
+      // Criar ticket real no Firebase
+      const realTicketId = generateId();
+      const realTicket: Ticket = {
+        id: realTicketId,
+        propertyCode: selectedTicket.propertyCode,
+        propertyName: selectedTicket.propertyName,
+        priority: selectedTicket.priority,
+        serviceType: selectedTicket.serviceType,
+        description: selectedTicket.description,
+        desiredDate: selectedTicket.desiredDate,
+        scheduledDate: selectedTicket.scheduledDate,
+        guestAuth: selectedTicket.guestAuth,
+        status: updates.status,
+        assignee: selectedTicket.assignee,
+        createdBy: 'Sistema',
+        createdByName: 'Automação de Check-out',
+        createdAt: Date.now(),
+        updatedAt: updates.updatedAt,
+        completedDate: updates.completedDate,
+        startedAt: updates.startedAt,
+        completionReport: updates.completionReport,
+        reservationId: selectedTicket.reservationId,
+        isCheckoutTicket: true,
+        category: 'maintenance',
+        expenses: [],
+      };
 
-    await storageService.tickets.add(realTicket);
-    addLog('Chamado', `Criou ticket de checkout e atualizou status para ${status}`);
-    addNotification('Ticket Criado', `Ticket de checkout criado com status ${status}`, 'success');
-    setSelectedTicket(realTicket);
+      await storageService.tickets.add(realTicket);
+      addLog('Chamado', `Criou ticket de checkout e atualizou status para ${status}`);
+      addNotification('Ticket Criado', `Ticket de checkout criado com status ${status}`, 'success');
+      setSelectedTicket(realTicket);
+    }
   } else {
     // Ticket normal - apenas fazer update
     const updates: any = { status, updatedAt: Date.now() };
     if (status === 'Concluído' as TicketStatus) {
       updates.completedDate = date;
-      if (completionReport) updates.completionReport = completionReport; // Task 38
+      if (completionReport) updates.completionReport = completionReport;
     }
     if (status === 'Em Andamento' as TicketStatus && startedAt) updates.startedAt = startedAt;
 
@@ -158,42 +171,61 @@ const TicketModals: React.FC<TicketModalsProps> = ({
 
  const handleAssign = async (id: string, assignee: string, date: string) => {
   // Task 33: Verificar se é um ticket virtual de checkout
-  // Tickets virtuais precisam ser criados no Firebase antes de serem atualizados
   const isVirtual = selectedTicket && (selectedTicket as any)._isVirtual === true;
 
   if (isVirtual && selectedTicket) {
-    // Criar ticket real no Firebase primeiro
-    const realTicketId = generateId();
-    const realTicket: Ticket = {
-      id: realTicketId,
-      propertyCode: selectedTicket.propertyCode,
-      propertyName: selectedTicket.propertyName,
-      priority: selectedTicket.priority,
-      serviceType: selectedTicket.serviceType,
-      description: selectedTicket.description,
-      desiredDate: selectedTicket.desiredDate,
-      scheduledDate: date, // Já incluir a data programada
-      guestAuth: selectedTicket.guestAuth,
-      status: selectedTicket.status,
-      assignee: assignee, // Já incluir o responsável
-      createdBy: 'Sistema',
-      createdByName: 'Automação de Check-out',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      reservationId: selectedTicket.reservationId,
-      isCheckoutTicket: true,
-      category: 'maintenance',
-      expenses: [],
-    };
+    // Buscar ticket real existente primeiro
+    const existingTicket = selectedTicket.reservationId 
+      ? await storageService.tickets.findByReservation(selectedTicket.reservationId)
+      : null;
 
-    // Adicionar ticket real no Firebase
-    await storageService.tickets.add(realTicket);
+    if (existingTicket) {
+      // Ticket já existe - apenas atualizar
+      await storageService.tickets.update({ 
+        id: existingTicket.id, 
+        assignee, 
+        scheduledDate: date, 
+        updatedAt: Date.now() 
+      } as any);
+      addLog('Chamado', `Atribuiu ${assignee} ao chamado de checkout`);
+      addNotification('Chamado Atualizado', `Responsável atribuído: ${assignee}`, 'info');
+      setSelectedTicket((prev: Ticket | null) => (prev ? { 
+        ...prev, 
+        assignee, 
+        scheduledDate: date, 
+        id: existingTicket.id,
+        _isVirtual: false 
+      } : null));
+    } else {
+      // Criar ticket real no Firebase
+      const realTicketId = generateId();
+      const realTicket: Ticket = {
+        id: realTicketId,
+        propertyCode: selectedTicket.propertyCode,
+        propertyName: selectedTicket.propertyName,
+        priority: selectedTicket.priority,
+        serviceType: selectedTicket.serviceType,
+        description: selectedTicket.description,
+        desiredDate: selectedTicket.desiredDate,
+        scheduledDate: date,
+        guestAuth: selectedTicket.guestAuth,
+        status: selectedTicket.status,
+        assignee: assignee,
+        createdBy: 'Sistema',
+        createdByName: 'Automação de Check-out',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        reservationId: selectedTicket.reservationId,
+        isCheckoutTicket: true,
+        category: 'maintenance',
+        expenses: [],
+      };
 
-    addLog('Chamado', `Criou ticket de checkout e atribuiu ${assignee}`);
-    addNotification('Ticket Criado', `Ticket de checkout criado e atribuído a ${assignee}`, 'success');
-
-    // Atualizar o selectedTicket com o ticket real (sem a flag _isVirtual)
-    setSelectedTicket(realTicket);
+      await storageService.tickets.add(realTicket);
+      addLog('Chamado', `Criou ticket de checkout e atribuiu ${assignee}`);
+      addNotification('Ticket Criado', `Ticket de checkout criado e atribuído a ${assignee}`, 'success');
+      setSelectedTicket(realTicket);
+    }
   } else {
     // Ticket normal (não virtual) - apenas fazer update
     storageService.tickets.update({ id, assignee, scheduledDate: date, updatedAt: Date.now() } as any);
@@ -216,34 +248,57 @@ const TicketModals: React.FC<TicketModalsProps> = ({
   const isVirtual = selectedTicket && (selectedTicket as any)._isVirtual === true;
 
   if (isVirtual && selectedTicket) {
-    // Criar ticket real no Firebase primeiro
-    const realTicketId = generateId();
-    const realTicket: Ticket = {
-      id: realTicketId,
-      propertyCode: selectedTicket.propertyCode,
-      propertyName: selectedTicket.propertyName,
-      priority: selectedTicket.priority,
-      serviceType: selectedTicket.serviceType,
-      description: selectedTicket.description,
-      desiredDate: selectedTicket.desiredDate,
-      scheduledDate: selectedTicket.scheduledDate,
-      guestAuth: selectedTicket.guestAuth,
-      status: selectedTicket.status,
-      assignee: selectedTicket.assignee,
-      createdBy: 'Sistema',
-      createdByName: 'Automação de Check-out',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      reservationId: selectedTicket.reservationId,
-      isCheckoutTicket: true,
-      category: 'maintenance',
-      expenses: [newExpense],
-    };
+    // Buscar ticket real existente primeiro
+    const existingTicket = selectedTicket.reservationId 
+      ? await storageService.tickets.findByReservation(selectedTicket.reservationId)
+      : null;
 
-    await storageService.tickets.add(realTicket);
-    addLog('Chamado', `Criou ticket de checkout e adicionou despesa`);
-    addNotification('Ticket Criado', `Ticket de checkout criado com despesa registrada`, 'success');
-    setSelectedTicket(realTicket);
+    if (existingTicket) {
+      // Ticket já existe - adicionar despesa ao ticket existente
+      const updatedExpenses = [...(existingTicket.expenses || []), newExpense];
+      await storageService.tickets.update({ 
+        id: existingTicket.id, 
+        expenses: updatedExpenses,
+        updatedAt: Date.now()
+      } as any);
+      addLog('Chamado', `Adicionou despesa ao chamado de checkout`);
+      addNotification('Despesa Adicionada', `Despesa registrada no ticket`, 'success');
+      setSelectedTicket((prev: Ticket | null) => (prev ? { 
+        ...prev, 
+        expenses: updatedExpenses,
+        id: existingTicket.id,
+        _isVirtual: false 
+      } : null));
+    } else {
+      // Criar ticket real no Firebase
+      const realTicketId = generateId();
+      const realTicket: Ticket = {
+        id: realTicketId,
+        propertyCode: selectedTicket.propertyCode,
+        propertyName: selectedTicket.propertyName,
+        priority: selectedTicket.priority,
+        serviceType: selectedTicket.serviceType,
+        description: selectedTicket.description,
+        desiredDate: selectedTicket.desiredDate,
+        scheduledDate: selectedTicket.scheduledDate,
+        guestAuth: selectedTicket.guestAuth,
+        status: selectedTicket.status,
+        assignee: selectedTicket.assignee,
+        createdBy: 'Sistema',
+        createdByName: 'Automação de Check-out',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        reservationId: selectedTicket.reservationId,
+        isCheckoutTicket: true,
+        category: 'maintenance',
+        expenses: [newExpense],
+      };
+
+      await storageService.tickets.add(realTicket);
+      addLog('Chamado', `Criou ticket de checkout e adicionou despesa`);
+      addNotification('Ticket Criado', `Ticket de checkout criado com despesa registrada`, 'success');
+      setSelectedTicket(realTicket);
+    }
   } else {
     // Ticket normal - apenas fazer update
     const updatedExpenses = [...(selectedTicket?.expenses || []), newExpense];
@@ -302,35 +357,59 @@ const TicketModals: React.FC<TicketModalsProps> = ({
   const isVirtual = selectedTicket && (selectedTicket as any)._isVirtual === true;
 
   if (isVirtual && selectedTicket) {
-   // Criar ticket real no Firebase primeiro
-   const realTicketId = generateId();
-   const realTicket: Ticket = {
-    id: realTicketId,
-    propertyCode: selectedTicket.propertyCode,
-    propertyName: selectedTicket.propertyName,
-    priority: selectedTicket.priority,
-    serviceType: selectedTicket.serviceType,
-    description: selectedTicket.description,
-    desiredDate: selectedTicket.desiredDate,
-    scheduledDate: selectedTicket.scheduledDate,
-    guestAuth: selectedTicket.guestAuth,
-    status: selectedTicket.status,
-    assignee: selectedTicket.assignee,
-    createdBy: 'Sistema',
-    createdByName: 'Automação de Check-out',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    reservationId: selectedTicket.reservationId,
-    isCheckoutTicket: true,
-    category: 'maintenance',
-    expenses: [],
-    observations: [newObservation],
-   };
+   // Buscar ticket real existente primeiro
+   const existingTicket = selectedTicket.reservationId 
+     ? await storageService.tickets.findByReservation(selectedTicket.reservationId)
+     : null;
 
-   await storageService.tickets.add(realTicket);
-   addLog('Chamado', `Criou ticket de checkout e adicionou observação`);
-   addNotification('Observação Salva', 'Observação registrada com sucesso', 'success');
-   setSelectedTicket(realTicket);
+   if (existingTicket) {
+     // Ticket já existe - adicionar observação ao ticket existente
+     const updatedObservations = [...(existingTicket.observations || []), newObservation];
+     await storageService.tickets.update({ 
+       id: existingTicket.id, 
+       observations: updatedObservations, 
+       updatedAt: Date.now() 
+     } as any);
+     addLog('Chamado', `Adicionou observação ao chamado de checkout`);
+     addNotification('Observação Salva', 'Observação registrada com sucesso', 'success');
+     setSelectedTicket((prev: Ticket | null) => (prev ? { 
+       ...prev, 
+       observations: updatedObservations, 
+       updatedAt: Date.now(),
+       id: existingTicket.id,
+       _isVirtual: false 
+     } : null));
+   } else {
+     // Criar ticket real no Firebase
+     const realTicketId = generateId();
+     const realTicket: Ticket = {
+      id: realTicketId,
+      propertyCode: selectedTicket.propertyCode,
+      propertyName: selectedTicket.propertyName,
+      priority: selectedTicket.priority,
+      serviceType: selectedTicket.serviceType,
+      description: selectedTicket.description,
+      desiredDate: selectedTicket.desiredDate,
+      scheduledDate: selectedTicket.scheduledDate,
+      guestAuth: selectedTicket.guestAuth,
+      status: selectedTicket.status,
+      assignee: selectedTicket.assignee,
+      createdBy: 'Sistema',
+      createdByName: 'Automação de Check-out',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      reservationId: selectedTicket.reservationId,
+      isCheckoutTicket: true,
+      category: 'maintenance',
+      expenses: [],
+      observations: [newObservation],
+     };
+
+     await storageService.tickets.add(realTicket);
+     addLog('Chamado', `Criou ticket de checkout e adicionou observação`);
+     addNotification('Observação Salva', 'Observação registrada com sucesso', 'success');
+     setSelectedTicket(realTicket);
+   }
   } else {
    // Ticket normal - apenas fazer update
    const updatedObservations = [...(selectedTicket?.observations || []), newObservation];
@@ -354,35 +433,58 @@ const TicketModals: React.FC<TicketModalsProps> = ({
   const isVirtual = selectedTicket && (selectedTicket as any)._isVirtual === true;
 
   if (isVirtual && selectedTicket) {
-   // Criar ticket real no Firebase primeiro
-   const realTicketId = generateId();
-   const realTicket: Ticket = {
-    id: realTicketId,
-    propertyCode: selectedTicket.propertyCode,
-    propertyName: selectedTicket.propertyName,
-    priority: selectedTicket.priority,
-    serviceType: selectedTicket.serviceType,
-    description: selectedTicket.description,
-    desiredDate: selectedTicket.desiredDate,
-    scheduledDate: selectedTicket.scheduledDate,
-    guestAuth: selectedTicket.guestAuth,
-    status: selectedTicket.status,
-    assignee: selectedTicket.assignee,
-    createdBy: 'Sistema',
-    createdByName: 'Automação de Check-out',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    reservationId: selectedTicket.reservationId,
-    isCheckoutTicket: true,
-    category: 'maintenance',
-    expenses: [],
-    problemReport,
-   };
+   // Buscar ticket real existente primeiro
+   const existingTicket = selectedTicket.reservationId 
+     ? await storageService.tickets.findByReservation(selectedTicket.reservationId)
+     : null;
 
-   await storageService.tickets.add(realTicket);
-   addLog('Chamado', `Criou ticket de checkout e adicionou relato de problema`);
-   addNotification('Relato Salvo', 'Problema relatado com sucesso', 'success');
-   setSelectedTicket(realTicket);
+   if (existingTicket) {
+     // Ticket já existe - atualizar com relato de problema
+     await storageService.tickets.update({ 
+       id: existingTicket.id, 
+       problemReport, 
+       updatedAt: Date.now() 
+     } as any);
+     addLog('Chamado', `Adicionou relato de problema ao chamado de checkout`);
+     addNotification('Relato Salvo', 'Problema relatado com sucesso', 'success');
+     setSelectedTicket((prev: Ticket | null) => (prev ? { 
+       ...prev, 
+       problemReport, 
+       updatedAt: Date.now(),
+       id: existingTicket.id,
+       _isVirtual: false 
+     } : null));
+   } else {
+     // Criar ticket real no Firebase
+     const realTicketId = generateId();
+     const realTicket: Ticket = {
+      id: realTicketId,
+      propertyCode: selectedTicket.propertyCode,
+      propertyName: selectedTicket.propertyName,
+      priority: selectedTicket.priority,
+      serviceType: selectedTicket.serviceType,
+      description: selectedTicket.description,
+      desiredDate: selectedTicket.desiredDate,
+      scheduledDate: selectedTicket.scheduledDate,
+      guestAuth: selectedTicket.guestAuth,
+      status: selectedTicket.status,
+      assignee: selectedTicket.assignee,
+      createdBy: 'Sistema',
+      createdByName: 'Automação de Check-out',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      reservationId: selectedTicket.reservationId,
+      isCheckoutTicket: true,
+      category: 'maintenance',
+      expenses: [],
+      problemReport,
+     };
+
+     await storageService.tickets.add(realTicket);
+     addLog('Chamado', `Criou ticket de checkout e adicionou relato de problema`);
+     addNotification('Relato Salvo', 'Problema relatado com sucesso', 'success');
+     setSelectedTicket(realTicket);
+   }
   } else {
    // Ticket normal - apenas fazer update
    await storageService.tickets.update({ id: ticketId, problemReport, updatedAt: Date.now() } as any);
