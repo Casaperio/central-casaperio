@@ -82,10 +82,35 @@ const CalendarView: React.FC<CalendarViewProps> = ({
  const renderEvent = (event: any, index: number) => {
   if (mode === 'maintenance') {
    const t = event.data as Ticket;
-   let colorClass = 'bg-blue-100 text-blue-700 border-blue-200';
-   if (t.status === TicketStatus.OPEN) colorClass = 'bg-red-100 text-red-700 border-red-200';
-   else if (t.status === TicketStatus.IN_PROGRESS) colorClass = 'bg-yellow-100 text-yellow-700 border-yellow-200';
-   else if (t.status === TicketStatus.DONE) colorClass = 'bg-green-100 text-green-700 border-green-200';
+   
+   // Cores dinâmicas por tipo de serviço e status
+   let colorClass = 'bg-blue-50 text-blue-700 border-blue-200';
+   
+   // Prioridade 1: Checkouts sempre em laranja suave
+   if (t.isCheckoutTicket) {
+     colorClass = 'bg-orange-50 text-orange-700 border-orange-200';
+   }
+   // Prioridade 2: Status do ticket
+   else if (t.status === TicketStatus.DONE || t.status === TicketStatus.COMPLETED) {
+     colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+   }
+   else if (t.status === TicketStatus.IN_PROGRESS) {
+     colorClass = 'bg-amber-50 text-amber-700 border-amber-200';
+   }
+   // Prioridade 3: Tipo de serviço (apenas para tickets abertos)
+   else if (t.status === TicketStatus.OPEN) {
+     const serviceType = t.serviceType?.toLowerCase() || '';
+     
+     if (serviceType.includes('limpeza')) {
+       colorClass = 'bg-sky-50 text-sky-700 border-sky-200';
+     } else if (serviceType.includes('manutenção') || serviceType.includes('manutencao')) {
+       colorClass = 'bg-violet-50 text-violet-700 border-violet-200';
+     } else if (serviceType.includes('problema') || t.priority === 'Crítica') {
+       colorClass = 'bg-red-50 text-red-700 border-red-200';
+     } else {
+       colorClass = 'bg-slate-50 text-slate-700 border-slate-200';
+     }
+   }
 
    return (
     <div 

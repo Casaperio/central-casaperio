@@ -290,7 +290,10 @@ export function useMaintenanceFilters({
     if (activeModule === 'maintenance' && shouldShowCheckouts) {
       staysReservations.forEach(r => {
         if (r.status === ReservationStatus.CANCELED) return;
-        const checkoutDate = new Date(r.checkOutDate);
+        
+        // Parse da data de checkout de forma consistente
+        const checkoutDateStr = r.checkOutDate.split('T')[0]; // YYYY-MM-DD
+        const checkoutDate = new Date(checkoutDateStr + 'T12:00:00'); // Meio-dia para evitar problemas de timezone
         checkoutDate.setHours(0, 0, 0, 0);
 
         // Filtrar checkouts por período (se aplicável)
@@ -373,7 +376,10 @@ export function useMaintenanceFilters({
     return staysReservations
       .filter(r => {
         if (r.status === ReservationStatus.CANCELED) return false;
-        const checkoutDate = new Date(r.checkOutDate);
+        
+        // Parse da data de checkout de forma consistente
+        const checkoutDateStr = r.checkOutDate.split('T')[0]; // YYYY-MM-DD
+        const checkoutDate = new Date(checkoutDateStr + 'T12:00:00'); // Meio-dia para evitar problemas de timezone
         checkoutDate.setHours(0, 0, 0, 0);
 
         // Se tiver filtro de período, aplicar

@@ -736,6 +736,8 @@ function AppContent() {
                 onLoadMore={loadMoreMaintenanceItems}
                 totalItems={maintenanceTotalItems}
                 displayCount={maintenanceDisplayCount}
+                staysReservations={staysReservations}
+                maintenanceOverrides={maintenanceOverrides}
               />
            )}
 
