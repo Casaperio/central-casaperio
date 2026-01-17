@@ -341,6 +341,57 @@ const TicketModals: React.FC<TicketModalsProps> = ({
   }
  };
 
+ const handleSaveProblemReport = async (ticketId: string, text: string, images: string[], userName: string) => {
+  const problemReport = {
+   text,
+   images,
+   createdAt: Date.now(),
+   createdBy: currentUser.id,
+   createdByName: userName,
+  };
+
+  // Task 33: Verificar se é um ticket virtual de checkout
+  const isVirtual = selectedTicket && (selectedTicket as any)._isVirtual === true;
+
+  if (isVirtual && selectedTicket) {
+   // Criar ticket real no Firebase primeiro
+   const realTicketId = generateId();
+   const realTicket: Ticket = {
+    id: realTicketId,
+    propertyCode: selectedTicket.propertyCode,
+    propertyName: selectedTicket.propertyName,
+    priority: selectedTicket.priority,
+    serviceType: selectedTicket.serviceType,
+    description: selectedTicket.description,
+    desiredDate: selectedTicket.desiredDate,
+    scheduledDate: selectedTicket.scheduledDate,
+    guestAuth: selectedTicket.guestAuth,
+    status: selectedTicket.status,
+    assignee: selectedTicket.assignee,
+    createdBy: 'Sistema',
+    createdByName: 'Automação de Check-out',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    reservationId: selectedTicket.reservationId,
+    isCheckoutTicket: true,
+    category: 'maintenance',
+    expenses: [],
+    problemReport,
+   };
+
+   await storageService.tickets.add(realTicket);
+   addLog('Chamado', `Criou ticket de checkout e adicionou relato de problema`);
+   addNotification('Relato Salvo', 'Problema relatado com sucesso', 'success');
+   setSelectedTicket(realTicket);
+  } else {
+   // Ticket normal - apenas fazer update
+   await storageService.tickets.update({ id: ticketId, problemReport, updatedAt: Date.now() } as any);
+   addLog('Chamado', `Adicionou relato de problema ao chamado ${ticketId}`);
+   addNotification('Relato Salvo', 'Problema relatado com sucesso', 'success');
+   setSelectedTicket((prev: Ticket | null) => (prev ? { ...prev, problemReport, updatedAt: Date.now() } : null));
+  }
+ };
+
  return (
   <>
    {showTicketForm && (
@@ -374,6 +425,7 @@ const TicketModals: React.FC<TicketModalsProps> = ({
      onDeleteTicket={handleDeleteTicket}
      onDismissCheckoutTicket={selectedTicket.isCheckoutTicket ? handleDismissCheckoutTicket : undefined}
      onSaveObservations={handleSaveObservations}
+     onSaveProblemReport={handleSaveProblemReport}
      allUsers={users}
      currentUser={currentUser}
     />

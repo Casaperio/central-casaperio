@@ -275,6 +275,11 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                               <MessageSquare size={10} /> {ticket.observations.length}
                             </span>
                           )}
+                          {ticket.problemReport && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 border border-red-200" title="Problema relatado">
+                              <AlertCircle size={10} /> PROBLEMA
+                            </span>
+                          )}
                         </div>
 
                         <h3 className="mb-1 text-base font-bold text-gray-900 truncate">{ticket.propertyCode}</h3>
@@ -404,6 +409,11 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                         {ticket.observations && ticket.observations.length > 0 && (
                           <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200" title={`${ticket.observations.length} observação(s)`}>
                             <MessageSquare size={10} /> {ticket.observations.length}
+                          </span>
+                        )}
+                        {ticket.problemReport && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200" title="Problema relatado">
+                            <AlertCircle size={10} /> PROBLEMA
                           </span>
                         )}
                       </div>
