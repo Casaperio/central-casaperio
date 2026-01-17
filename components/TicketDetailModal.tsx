@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Ticket, TicketStatus } from '../types';
-import { X, Calendar, User, Clock, CheckCircle2, AlertTriangle, FileText, Shield, DollarSign, Plus, Trash2, ChevronLeft, LogOut } from 'lucide-react';
+import { X, Calendar, User, Clock, CheckCircle2, AlertTriangle, FileText, Shield, DollarSign, Plus, Trash2, ChevronLeft, LogOut, MessageSquare } from 'lucide-react';
+import { generateId } from '../utils';
 
 interface TicketDetailModalProps {
  ticket: Ticket;
@@ -10,11 +11,13 @@ interface TicketDetailModalProps {
  onAddExpense: (ticketId: string, description: string, amount: number) => void;
  onDeleteExpense: (ticketId: string, expenseId: string) => void;
  onDeleteTicket: (id: string) => void;
- onDismissCheckoutTicket?: (ticket: Ticket) => void; // Para dispensar tickets automáticos de checkout
+ onDismissCheckoutTicket?: (ticket: Ticket) => void;
+ onSaveObservations: (ticketId: string, observationText: string, userName: string) => void;
  allUsers: { name: string; role: string }[];
+ currentUser?: { id: string; name: string };
 }
 
-const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateStatus, onAssign, onAddExpense, onDeleteExpense, onDeleteTicket, onDismissCheckoutTicket, allUsers }) => {
+const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateStatus, onAssign, onAddExpense, onDeleteExpense, onDeleteTicket, onDismissCheckoutTicket, onSaveObservations, allUsers, currentUser }) => {
  const isUrgent = ticket.priority.toLowerCase().includes('urgente');
  const isVirtualTicket = (ticket as any)._isVirtual === true;
  const [showCompletionDate, setShowCompletionDate] = useState(false);
@@ -37,6 +40,10 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
  const [showCompletionReport, setShowCompletionReport] = useState(false);
  const [completionNotes, setCompletionNotes] = useState('');
  const [completionPhoto, setCompletionPhoto] = useState<string | null>(null);
+
+ // Observações Internas State
+ const [observationText, setObservationText] = useState('');
+ const [showObservationForm, setShowObservationForm] = useState(false);
 
  const renderStatusBadge = (status: TicketStatus) => {
   switch (status) {
@@ -112,6 +119,18 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
   setExpenseDesc('');
   setExpenseAmount('');
   setShowExpenseForm(false);
+ };
+
+ const handleSaveObservation = () => {
+  if (!observationText.trim()) {
+   alert("Digite uma observação antes de salvar.");
+   return;
+  }
+  
+  const userName = currentUser?.name || 'Usuário';
+  onSaveObservations(ticket.id, observationText.trim(), userName);
+  setObservationText('');
+  setShowObservationForm(false);
  };
 
  const handleDelete = () => {
@@ -322,6 +341,76 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
         </div>
        </div>
       </div>
+     </div>
+
+     {/* Observações Internas */}
+     <div className="border-t border-gray-100 pt-6">
+      <div className="flex justify-between items-center mb-2">
+       <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Observações</h3>
+       {!showObservationForm && (
+        <button
+         onClick={() => setShowObservationForm(true)}
+         className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1"
+        >
+         <Plus size={14} /> Nova Observação
+        </button>
+       )}
+      </div>
+
+      {/* Formulário de Nova Observação */}
+      {showObservationForm && (
+       <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-3 mb-3 animate-fade-in">
+        <textarea
+         value={observationText}
+         onChange={(e) => setObservationText(e.target.value)}
+         placeholder="Anotações internas sobre este chamado..."
+         className="w-full border border-gray-300 rounded p-3 text-sm min-h-[100px] resize-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+         autoFocus
+        />
+        <div className="flex gap-2">
+         <button
+          onClick={handleSaveObservation}
+          className="flex-1 bg-brand-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-brand-700 transition-colors"
+         >
+          Salvar Observação
+         </button>
+         <button
+          onClick={() => {
+           setObservationText('');
+           setShowObservationForm(false);
+          }}
+          className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded text-sm font-medium hover:bg-gray-200 transition-colors"
+         >
+          Cancelar
+         </button>
+        </div>
+       </div>
+      )}
+
+      {/* Histórico de Observações */}
+      {ticket.observations && ticket.observations.length > 0 ? (
+       <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+        {ticket.observations.slice().reverse().map((obs) => (
+         <div key={obs.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap mb-2">
+           {obs.text}
+          </p>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+           <User size={12} />
+           <span className="font-medium">{obs.createdByName || 'Usuário'}</span>
+           <span>•</span>
+           <Clock size={12} />
+           <span>{new Date(obs.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+         </div>
+        ))}
+       </div>
+      ) : (
+       <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+        <MessageSquare size={24} className="mx-auto text-gray-400 mb-2" />
+        <p className="text-sm text-gray-500">Nenhuma observação registrada ainda.</p>
+       </div>
+      )}
      </div>
 
      {/* Expenses Section */}

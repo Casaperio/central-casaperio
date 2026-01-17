@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, CalendarClock, LogOut as LogOutIcon, ChevronDown } from 'lucide-react';
+import { AlertCircle, CalendarClock, LogOut as LogOutIcon, ChevronDown, MessageSquare } from 'lucide-react';
 import { Ticket, TicketStatus, AppModule, Reservation } from '../../types';
 import { MaintenanceGroup, MaintenanceItem, PeriodPreset } from '../../hooks/features/useMaintenanceFilters';
 import { useMaintenanceCalendar } from '../../hooks/features/useMaintenanceCalendar';
@@ -270,6 +270,11 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${ticket.priority === 'Urgente' ? 'border-red-100 text-red-600 bg-red-50' : 'border-gray-100 text-gray-500 bg-gray-50'}`}>
                             {ticket.priority}
                           </span>
+                          {ticket.observations && ticket.observations.length > 0 && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 border border-blue-200" title={`${ticket.observations.length} observação(s)`}>
+                              <MessageSquare size={10} /> {ticket.observations.length}
+                            </span>
+                          )}
                         </div>
 
                         <h3 className="mb-1 text-base font-bold text-gray-900 truncate">{ticket.propertyCode}</h3>
@@ -396,6 +401,11 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                         }`}>
                           {ticket.priority}
                         </span>
+                        {ticket.observations && ticket.observations.length > 0 && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200" title={`${ticket.observations.length} observação(s)`}>
+                            <MessageSquare size={10} /> {ticket.observations.length}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
