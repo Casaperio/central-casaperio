@@ -270,9 +270,19 @@ export function useMaintenanceFilters({
     const shouldShowCheckouts = filterMaintenanceType.length === 0 || filterMaintenanceType.includes('checkout');
     const shouldShowTickets = filterMaintenanceType.length === 0 || filterMaintenanceType.some(t => t !== 'checkout');
 
-    // Adicionar tickets aos grupos (se não estiver filtrando apenas checkouts)
+    // CORREÇÃO CRÍTICA: Mapear reservationIds de todos os tickets de checkout reais
+    // Isso evita duplicação - items virtuais serão criados APENAS para reservas sem ticket
+    const checkoutTicketReservationIds = new Set<string>();
+    filteredTickets.forEach(t => {
+      if (t.isCheckoutTicket && t.reservationId) {
+        checkoutTicketReservationIds.add(t.reservationId);
+      }
+    });
+
+    // Adicionar tickets aos grupos (incluindo tickets de checkout reais)
     if (shouldShowTickets) {
       filteredTickets.forEach(t => {
+        // Incluir TODOS os tickets, inclusive checkouts reais
         if (t.scheduledDate || (t.status === TicketStatus.DONE && t.completedDate)) {
           const dateStr = t.scheduledDate || t.completedDate;
           const dateKey = dateStr!.split('T')[0];
@@ -284,7 +294,7 @@ export function useMaintenanceFilters({
       });
     }
 
-    // Adicionar checkouts aos grupos
+    // Adicionar checkouts VIRTUAIS aos grupos (APENAS para reservas sem ticket real)
     if (activeModule === 'maintenance' && shouldShowCheckouts) {
       staysReservations.forEach(r => {
         if (r.status === ReservationStatus.CANCELED) return;
@@ -302,6 +312,11 @@ export function useMaintenanceFilters({
         }
 
         if (passesDateFilter) {
+          // REGRA DE UNICIDADE: Criar item virtual APENAS se não existir ticket real
+          if (checkoutTicketReservationIds.has(r.id)) {
+            return; // JÁ existe ticket real - não criar item virtual
+          }
+
           // Filtrar checkouts ocultos (dispensados pelo usuário)
           const checkoutItem = { type: 'checkout' as const, reservation: r };
           const itemKey = getMaintenanceItemKey(checkoutItem);
