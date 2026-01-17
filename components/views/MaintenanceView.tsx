@@ -229,9 +229,6 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-violet-50 text-violet-700">
                               {isTodayCheckout ? 'HOJE' : isTomorrowCheckout ? 'AMANHÃ' : formatDatePtBR(r.checkOutDate)}
                             </span>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700">
-                              Limpeza de Check-out
-                            </span>
                           </div>
 
                           <h3 className="mb-1 text-base font-bold text-gray-900 truncate">{r.propertyCode}</h3>
@@ -272,26 +269,34 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                         {ticket.isGuestRequest && !ticket.isCheckoutTicket && <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider">Hóspede</div>}
                         {ticket.isPreventive && !ticket.isCheckoutTicket && <div className="absolute top-0 right-0 bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider flex items-center gap-1">PREVENTIVA</div>}
 
-                        <div className="flex items-start justify-between mt-2 mb-2 flex-wrap gap-1">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
-                            ${ticket.status === TicketStatus.OPEN ? 'bg-red-50 text-red-700' :
-                              ticket.status === TicketStatus.IN_PROGRESS ? 'bg-yellow-50 text-yellow-700' :
-                              'bg-green-50 text-green-700'}`}>
-                            {ticket.status}
-                          </span>
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${ticket.priority === 'Urgente' ? 'border-red-100 text-red-600 bg-red-50' : 'border-gray-100 text-gray-500 bg-gray-50'}`}>
-                            {ticket.priority}
-                          </span>
-                          {ticket.observations && ticket.observations.length > 0 && (
-                            <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 border border-blue-200" title={`${ticket.observations.length} observação(s)`}>
-                              <MessageSquare size={10} /> {ticket.observations.length}
+                        {/* Container de tags com dois grupos: esquerdo (Status/Prioridade) e direito (Problema/Observações) */}
+                        <div className="flex items-start justify-between mt-2 mb-2 gap-2">
+                          {/* Grupo ESQUERDO: Status + Prioridade */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
+                              ${ticket.status === TicketStatus.OPEN ? 'bg-red-50 text-red-700' :
+                                ticket.status === TicketStatus.IN_PROGRESS ? 'bg-yellow-50 text-yellow-700' :
+                                'bg-green-50 text-green-700'}`}>
+                              {ticket.status}
                             </span>
-                          )}
-                          {ticket.problemReport && (
-                            <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 border border-red-200" title="Problema relatado">
-                              <AlertCircle size={10} /> PROBLEMA
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${ticket.priority === 'Urgente' ? 'border-red-100 text-red-600 bg-red-50' : 'border-gray-100 text-gray-500 bg-gray-50'}`}>
+                              {ticket.priority}
                             </span>
-                          )}
+                          </div>
+
+                          {/* Grupo DIREITO: Problema + Observações (badge angular CHECKOUT já está no absolute top-right) */}
+                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                            {ticket.problemReport && (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 border border-red-200" title="Problema relatado">
+                                <AlertCircle size={10} /> PROBLEMA
+                              </span>
+                            )}
+                            {ticket.observations && ticket.observations.length > 0 && (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 border border-blue-200" title={`${ticket.observations.length} observação(s)`}>
+                                <MessageSquare size={10} /> {ticket.observations.length}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         <h3 className="mb-1 text-base font-bold text-gray-900 truncate">{ticket.propertyCode}</h3>
@@ -375,15 +380,12 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-600">{formatDatePtBR(r.checkOutDate)}</span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-50 text-blue-700">
-                            Limpeza
-                          </span>
                           {/* Responsável Técnico - Sempre "Não atribuído" para checkouts virtuais */}
                           <span className="flex items-center gap-1 text-xs text-gray-400 italic">
                             <User size={12} />
                             <span>Não atribuído</span>
                           </span>
+                          <span className="text-xs text-gray-600">{formatDatePtBR(r.checkOutDate)}</span>
                         </div>
                       </div>
                     );
