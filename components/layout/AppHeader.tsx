@@ -181,6 +181,48 @@ const AppHeader: React.FC<AppHeaderProps> = ({
        </button>
       </div>
      )}
+
+     {/* View toggle for Maintenance and Concierge modules */}
+     {(activeModule === 'maintenance' || activeModule === 'concierge') && (viewMode === 'cards' || viewMode === 'list' || viewMode === 'calendar') && (
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+       <button
+        onClick={() => setViewMode('cards')}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+         viewMode === 'cards'
+          ? 'bg-white shadow-sm'
+          : 'text-gray-600 hover:text-gray-900'
+        }`}
+        style={viewMode === 'cards' ? { color: '#024F6C' } : {}}
+       >
+        <LayoutGrid size={16} />
+        <span className="hidden md:inline">Cards</span>
+       </button>
+       <button
+        onClick={() => setViewMode('list')}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+         viewMode === 'list'
+          ? 'bg-white shadow-sm'
+          : 'text-gray-600 hover:text-gray-900'
+        }`}
+        style={viewMode === 'list' ? { color: '#024F6C' } : {}}
+       >
+        <List size={16} />
+        <span className="hidden md:inline">Lista</span>
+       </button>
+       <button
+        onClick={() => setViewMode('calendar')}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+         viewMode === 'calendar'
+          ? 'bg-white shadow-sm'
+          : 'text-gray-600 hover:text-gray-900'
+        }`}
+        style={viewMode === 'calendar' ? { color: '#024F6C' } : {}}
+       >
+        <Calendar size={16} />
+        <span className="hidden md:inline">Calendário</span>
+       </button>
+      </div>
+     )}
     </div>
    </header>
 

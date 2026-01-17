@@ -89,7 +89,7 @@ interface UseMaintenanceFiltersProps {
   filterStatus: string;
   filterMaintenanceAssignee: string;
   filterMaintenanceProperty: string;
-  filterMaintenanceType: string;
+  filterMaintenanceType: string[];
   activeModule: string | null;
   periodPreset?: PeriodPreset;
   customStartDate?: string;
@@ -197,25 +197,23 @@ export function useMaintenanceFilters({
       const matchesAssignee = filterMaintenanceAssignee === 'all' || t.assignee === filterMaintenanceAssignee;
       const matchesProperty = filterMaintenanceProperty === 'all' || t.propertyCode === filterMaintenanceProperty;
 
-      // Filtro por tipo
+      // Filtro por tipo (multi-seleção)
       let matchesType = true;
-      if (filterMaintenanceType !== 'all') {
-        switch (filterMaintenanceType) {
-          case 'checkout':
-            matchesType = t.isCheckoutTicket === true;
-            break;
-          case 'preventive':
-            matchesType = t.isPreventive === true;
-            break;
-          case 'guest':
-            matchesType = t.isGuestRequest === true;
-            break;
-          case 'regular':
-            matchesType = !t.isCheckoutTicket && !t.isPreventive && !t.isGuestRequest;
-            break;
-          default:
-            matchesType = true;
-        }
+      if (filterMaintenanceType.length > 0) {
+        matchesType = filterMaintenanceType.some(selectedType => {
+          switch (selectedType) {
+            case 'checkout':
+              return t.isCheckoutTicket === true;
+            case 'preventive':
+              return t.isPreventive === true;
+            case 'guest':
+              return t.isGuestRequest === true;
+            case 'regular':
+              return !t.isCheckoutTicket && !t.isPreventive && !t.isGuestRequest;
+            default:
+              return false;
+          }
+        });
       }
 
       // Filtrar por período de data (apenas se shouldFilterByPeriod = true)
@@ -268,9 +266,9 @@ export function useMaintenanceFilters({
     const unscheduled: MaintenanceItem[] = [];
     const scheduledMap: Record<string, MaintenanceItem[]> = {};
 
-    // Verificar se deve mostrar checkouts
-    const shouldShowCheckouts = filterMaintenanceType === 'all' || filterMaintenanceType === 'checkout';
-    const shouldShowTickets = filterMaintenanceType !== 'checkout';
+    // Verificar se deve mostrar checkouts (se array vazio ou contém 'checkout')
+    const shouldShowCheckouts = filterMaintenanceType.length === 0 || filterMaintenanceType.includes('checkout');
+    const shouldShowTickets = filterMaintenanceType.length === 0 || filterMaintenanceType.some(t => t !== 'checkout');
 
     // Adicionar tickets aos grupos (se não estiver filtrando apenas checkouts)
     if (shouldShowTickets) {
@@ -290,7 +288,10 @@ export function useMaintenanceFilters({
     if (activeModule === 'maintenance' && shouldShowCheckouts) {
       staysReservations.forEach(r => {
         if (r.status === ReservationStatus.CANCELED) return;
-        const checkoutDate = new Date(r.checkOutDate);
+        
+        // Parse da data de checkout de forma consistente
+        const checkoutDateStr = r.checkOutDate.split('T')[0]; // YYYY-MM-DD
+        const checkoutDate = new Date(checkoutDateStr + 'T12:00:00'); // Meio-dia para evitar problemas de timezone
         checkoutDate.setHours(0, 0, 0, 0);
 
         // Filtrar checkouts por período (se aplicável)
@@ -373,7 +374,10 @@ export function useMaintenanceFilters({
     return staysReservations
       .filter(r => {
         if (r.status === ReservationStatus.CANCELED) return false;
-        const checkoutDate = new Date(r.checkOutDate);
+        
+        // Parse da data de checkout de forma consistente
+        const checkoutDateStr = r.checkOutDate.split('T')[0]; // YYYY-MM-DD
+        const checkoutDate = new Date(checkoutDateStr + 'T12:00:00'); // Meio-dia para evitar problemas de timezone
         checkoutDate.setHours(0, 0, 0, 0);
 
         // Se tiver filtro de período, aplicar

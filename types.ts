@@ -144,6 +144,20 @@ export interface Ticket {
     notes?: string;
     photos?: string[]; // base64 strings
   };
+  problemReport?: {
+    text: string;
+    images: string[]; // base64 strings
+    createdAt: number;
+    createdBy: string;
+    createdByName?: string;
+  };
+  observations?: {
+    id: string;
+    text: string;
+    createdAt: number;
+    createdBy: string;
+    createdByName?: string;
+  }[];
 }
 
 export enum ReservationStatus {
