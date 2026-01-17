@@ -294,7 +294,7 @@ function AppContent() {
   // Maintenance Specific Filters
   const [filterMaintenanceAssignee, setFilterMaintenanceAssignee] = useState<string>('all');
   const [filterMaintenanceProperty, setFilterMaintenanceProperty] = useState<string>('all');
-  const [filterMaintenanceType, setFilterMaintenanceType] = useState<string>('all');
+  const [filterMaintenanceType, setFilterMaintenanceType] = useState<string[]>([]);
 
   // Maintenance Period Filter (default: 'all' - sem filtro)
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('all');

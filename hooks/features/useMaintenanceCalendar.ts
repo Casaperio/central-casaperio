@@ -8,7 +8,7 @@ interface UseMaintenanceCalendarProps {
   currentMonth: Date; // Mês sendo visualizado no calendário
   searchTerm: string;
   filterMaintenanceProperty: string;
-  filterMaintenanceType: string;
+  filterMaintenanceType: string[];
   activeModule: string | null;
   maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>;
 }
@@ -48,9 +48,9 @@ export function useMaintenanceCalendar({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Verificar se deve mostrar checkouts
-    const shouldShowCheckouts = filterMaintenanceType === 'all' || filterMaintenanceType === 'checkout';
-    const shouldShowTickets = filterMaintenanceType !== 'checkout';
+    // Verificar se deve mostrar checkouts (se array vazio ou contém 'checkout')
+    const shouldShowCheckouts = filterMaintenanceType.length === 0 || filterMaintenanceType.includes('checkout');
+    const shouldShowTickets = filterMaintenanceType.length === 0 || filterMaintenanceType.some(t => t !== 'checkout');
 
     const allTickets: Ticket[] = [];
 
@@ -83,7 +83,26 @@ export function useMaintenanceCalendar({
 
         const matchesProperty = filterMaintenanceProperty === 'all' || t.propertyCode === filterMaintenanceProperty;
 
-        if (matchesSearch && matchesProperty) {
+        // Filtro de tipo (multi-seleção)
+        let matchesType = filterMaintenanceType.length === 0; // Se vazio, mostrar todos
+        if (filterMaintenanceType.length > 0) {
+          matchesType = filterMaintenanceType.some(selectedType => {
+            switch (selectedType) {
+              case 'checkout':
+                return t.isCheckoutTicket === true;
+              case 'preventive':
+                return t.isPreventive === true;
+              case 'guest':
+                return t.isGuestRequest === true;
+              case 'regular':
+                return !t.isCheckoutTicket && !t.isPreventive && !t.isGuestRequest;
+              default:
+                return false;
+            }
+          });
+        }
+
+        if (matchesSearch && matchesProperty && matchesType) {
           allTickets.push(t);
         }
       });

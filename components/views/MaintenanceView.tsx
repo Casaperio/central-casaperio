@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, CalendarClock, LogOut as LogOutIcon, ChevronDown, MessageSquare } from 'lucide-react';
+import { AlertCircle, CalendarClock, LogOut as LogOutIcon, ChevronDown, MessageSquare, User } from 'lucide-react';
 import { Ticket, TicketStatus, AppModule, Reservation } from '../../types';
 import { MaintenanceGroup, MaintenanceItem, PeriodPreset } from '../../hooks/features/useMaintenanceFilters';
 import { useMaintenanceCalendar } from '../../hooks/features/useMaintenanceCalendar';
@@ -22,8 +22,8 @@ interface MaintenanceViewProps {
   filterStatus: string;
   filterMaintenanceAssignee: string;
   filterMaintenanceProperty: string;
-  filterMaintenanceType: string;
-  setFilterMaintenanceType: (type: string) => void;
+  filterMaintenanceType: string[];
+  setFilterMaintenanceType: (types: string[]) => void;
   activeModule: AppModule;
   gridColumns: number;
   periodPreset: PeriodPreset;
@@ -227,6 +227,12 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                           <p className="h-10 mb-3 text-sm text-gray-500 line-clamp-2">
                             Limpeza de check-out automática
                           </p>
+                          
+                          {/* Responsável Técnico - Sempre "Não atribuído" para checkouts virtuais */}
+                          <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-1 italic">
+                            <User size={12} />
+                            <span>Não atribuído</span>
+                          </div>
                         </div>
                       );
                     }
@@ -284,6 +290,14 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
 
                         <h3 className="mb-1 text-base font-bold text-gray-900 truncate">{ticket.propertyCode}</h3>
                         <p className="h-10 mb-3 text-sm text-gray-500 line-clamp-2">{ticket.description}</p>
+                        
+                        {/* Responsável Técnico - Texto discreto sempre visível */}
+                        <div className="flex items-center gap-1.5 text-xs mt-1">
+                          <User size={12} className="text-gray-400" />
+                          <span className={ticket.assignee ? "text-gray-600 font-medium" : "text-gray-400 italic"}>
+                            {ticket.assignee || "Não atribuído"}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}
@@ -359,6 +373,11 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-50 text-blue-700">
                             Limpeza
                           </span>
+                          {/* Responsável Técnico - Sempre "Não atribuído" para checkouts virtuais */}
+                          <span className="flex items-center gap-1 text-xs text-gray-400 italic">
+                            <User size={12} />
+                            <span>Não atribuído</span>
+                          </span>
                         </div>
                       </div>
                     );
@@ -398,9 +417,6 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-600">
-                          {formatDatePtBR(ticket.scheduledDate || ticket.desiredDate)}
-                        </span>
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
                           ticket.priority === 'Urgente' ? 'border-red-100 text-red-600 bg-red-50' : 'border-gray-100 text-gray-500 bg-gray-50'
                         }`}>
@@ -416,6 +432,17 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                             <AlertCircle size={10} /> PROBLEMA
                           </span>
                         )}
+                        {/* Responsável Técnico - Texto discreto sempre visível */}
+                        <span className="flex items-center gap-1 text-xs">
+                          <User size={12} className="text-gray-400" />
+                          <span className={ticket.assignee ? "text-gray-600 font-medium" : "text-gray-400 italic"}>
+                            {ticket.assignee || "Não atribuído"}
+                          </span>
+                        </span>
+                        {/* Data por último */}
+                        <span className="text-xs text-gray-600">
+                          {formatDatePtBR(ticket.scheduledDate || ticket.desiredDate)}
+                        </span>
                       </div>
                     </div>
                   );
