@@ -104,6 +104,21 @@ export const storageService = {
     delete: async (id: string) => {
       ensureDb();
       await db.collection(COLLECTIONS.TICKETS).doc(id).delete();
+    },
+
+    // Buscar ticket existente de checkout por reservationId
+    findByReservation: async (reservationId: string): Promise<Ticket | null> => {
+      ensureDb();
+      const q = db.collection(COLLECTIONS.TICKETS)
+        .where('reservationId', '==', reservationId)
+        .where('isCheckoutTicket', '==', true)
+        .limit(1);
+      
+      const snapshot = await q.get();
+      if (snapshot.empty) return null;
+      
+      const doc = snapshot.docs[0];
+      return { id: doc.id, ...doc.data() } as Ticket;
     }
   },
 
