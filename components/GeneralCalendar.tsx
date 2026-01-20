@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, ZoomIn, ZoomOut, Users, Filter, XCircle } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, ZoomIn, ZoomOut, Users, Filter, XCircle, Maximize2, Minimize2 } from 'lucide-react';
 import MarqueeText from './MarqueeText';
 import type { CalendarUnit, CalendarReservation } from '../services/staysApiService';
 import { parseLocalDate, getTodayBrazil } from '../utils';
@@ -12,20 +12,96 @@ interface GeneralCalendarProps {
 const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationClick }) => {
  const [startDate, setStartDate] = useState(() => {
   const today = getTodayBrazil();
-  today.setDate(today.getDate() - 2); // Start slightly before today
+  today.setDate(today.getDate() - 2);
   return today;
  });
- 
- // 1 = Out (3 Months), 2 = Mid (1 Month), 3 = In (2 Weeks)
- const [zoomLevel, setZoomLevel] = useState(2); 
  
  // Channel Filter State
  const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
 
- // Configuration based on Zoom Level
- const DAYS_TO_SHOW = zoomLevel === 1 ? 92 : zoomLevel === 2 ? 31 : 14; 
- const CELL_WIDTH = zoomLevel === 1 ? 24 : zoomLevel === 2 ? 48 : 120; 
+ // Fullscreen State
+ const [isFullscreen, setIsFullscreen] = useState(false);
+
+ // Zoom density (modo normal)
+ const [normalZoomDensity, setNormalZoomDensity] = useState(1.0);
  
+ // Zoom density (modo canvas/tela cheia) - MÍNIMO 1.0x
+ const [canvasZoomDensity, setCanvasZoomDensity] = useState(1.0);
+
+ // Container ref for canvas calculations
+ const canvasContainerRef = useRef<HTMLDivElement>(null);
+ const fullscreenWrapperRef = useRef<HTMLDivElement>(null);
+ const [canvasViewport, setCanvasViewport] = useState({ width: 0, height: 0 });
+
+ // === MODO NORMAL: CONFIGURAÇÃO COM ZOOM (0.5x - 2.0x) ===
+ const calculateNormalLayout = () => {
+  const baseDays = 31;
+  const daysToShow = Math.round(baseDays / normalZoomDensity);
+  const cellWidth = 48 * normalZoomDensity;
+  const rowHeight = 48;
+  
+  return {
+   DAYS: daysToShow,
+   CELL_WIDTH: cellWidth,
+   ROW_HEIGHT: rowHeight,
+   PROPERTY_COLUMN_WIDTH: 160,
+  };
+ };
+
+ const normalLayout = calculateNormalLayout();
+
+ // === MODO CANVAS: COLUNA FIXA + GRID RESPONSÍVO (ZOOM 1.0x - 3.0x) ===
+ const calculateCanvasLayout = () => {
+  if (!isFullscreen || canvasViewport.width === 0) {
+   return normalLayout;
+  }
+
+  const HEADER_HEIGHT = 140;
+  const PADDING = 20;
+
+  // Área útil total da viewport
+  const totalWidth = canvasViewport.width - PADDING;
+  const totalHeight = canvasViewport.height - HEADER_HEIGHT - PADDING;
+
+  // COLUNA FIXA: Largura responsíva mas NÃO afetada pelo zoom
+  const viewportWidth = canvasViewport.width;
+  let fixedColumnWidth = 160; // Desktop padrão
+  
+  if (viewportWidth < 1024) {
+   fixedColumnWidth = 120; // Tablets
+  } else if (viewportWidth < 768) {
+   fixedColumnWidth = 100; // Mobile
+  } else if (viewportWidth >= 1920) {
+   fixedColumnWidth = 200; // Telas grandes
+  }
+
+  // Canvas sempre mostra 6 MESES (180 dias)
+  const canvasBaseDays = 180;
+  
+  // Largura disponível para o grid (descontando coluna fixa)
+  const gridWidth = totalWidth - fixedColumnWidth;
+  
+  // Cálculo base: cabe exatamente sem zoom
+  const baseCellWidth = gridWidth / canvasBaseDays;
+  const baseRowHeight = totalHeight / Math.max(units.length, 1);
+
+  // ZOOM afeta APENAS o grid (não a coluna)
+  const cellWidth = baseCellWidth * canvasZoomDensity;
+  const rowHeight = Math.max(24, baseRowHeight * canvasZoomDensity);
+
+  return {
+   DAYS: canvasBaseDays,
+   CELL_WIDTH: cellWidth,
+   ROW_HEIGHT: rowHeight,
+   PROPERTY_COLUMN_WIDTH: fixedColumnWidth, // SEMPRE FIXA
+  };
+ };
+
+ const canvasLayout = isFullscreen ? calculateCanvasLayout() : normalLayout;
+
+ // Configuração ativa (condicional baseada no modo)
+ const CONFIG = isFullscreen ? canvasLayout : normalLayout;
+
  const CHANNELS = [
   { id: 'airbnb', label: 'Airbnb', color: 'bg-red-500' },
   { id: 'booking', label: 'Booking', color: 'bg-blue-600' },
@@ -35,18 +111,101 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
   { id: 'direto', label: 'Direto', color: 'bg-yellow-400' },
  ];
 
+ // Fullscreen API - ativar/desativar fullscreen real do navegador
+ useEffect(() => {
+  if (!fullscreenWrapperRef.current) return;
+
+  const enterFullscreen = async () => {
+   try {
+    if (fullscreenWrapperRef.current && !document.fullscreenElement) {
+     await fullscreenWrapperRef.current.requestFullscreen();
+    }
+   } catch (err) {
+    console.warn('Fullscreen não disponível:', err);
+   }
+  };
+
+  const exitFullscreen = async () => {
+   try {
+    if (document.fullscreenElement) {
+     await document.exitFullscreen();
+    }
+   } catch (err) {
+    console.warn('Erro ao sair do fullscreen:', err);
+   }
+  };
+
+  if (isFullscreen) {
+   enterFullscreen();
+  } else {
+   exitFullscreen();
+  }
+
+  // Listener para quando usuário sai do fullscreen com ESC
+  const handleFullscreenChange = () => {
+   if (!document.fullscreenElement && isFullscreen) {
+    setIsFullscreen(false);
+    setCanvasZoomDensity(1.0);
+   }
+  };
+
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
+  return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+ }, [isFullscreen]);
+ // Track canvas dimensions
+ useEffect(() => {
+  if (!isFullscreen || !canvasContainerRef.current) return;
+
+  const updateDimensions = () => {
+   if (canvasContainerRef.current) {
+    setCanvasViewport({
+     width: canvasContainerRef.current.clientWidth,
+     height: canvasContainerRef.current.clientHeight,
+    });
+   }
+  };
+
+  updateDimensions();
+  window.addEventListener('resize', updateDimensions);
+  return () => window.removeEventListener('resize', updateDimensions);
+ }, [isFullscreen]);
+
+ // Zoom com scroll do mouse no canvas (estilo Google Maps)
+ useEffect(() => {
+  if (!isFullscreen || !canvasContainerRef.current) return;
+
+  const handleWheel = (e: WheelEvent) => {
+   e.preventDefault();
+   
+   const zoomSpeed = 0.1;
+   const delta = -Math.sign(e.deltaY) * zoomSpeed;
+   
+   setCanvasZoomDensity(prev => {
+    const newZoom = prev + delta;
+    // LIMITE: 1.0x (mínimo) a 3.0x (máximo)
+    return Math.max(1.0, Math.min(3.0, newZoom));
+   });
+  };
+
+  const container = canvasContainerRef.current;
+  container.addEventListener('wheel', handleWheel, { passive: false });
+  
+  return () => {
+   container.removeEventListener('wheel', handleWheel);
+  };
+ }, [isFullscreen]);
+
  // Generate Date Headers
  const dates = useMemo(() => {
   const arr = [];
-  for (let i = 0; i < DAYS_TO_SHOW; i++) {
+  for (let i = 0; i < CONFIG.DAYS; i++) {
    const d = new Date(startDate);
    d.setDate(d.getDate() + i);
    arr.push(d);
   }
   return arr;
- }, [startDate, DAYS_TO_SHOW]);
+ }, [startDate, CONFIG.DAYS]);
 
- // Group dates by Month for the top header row
  const monthGroups = useMemo(() => {
    const groups: { name: string; count: number }[] = [];
    let currentMonth = '';
@@ -74,6 +233,32 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
   setStartDate(newDate);
  };
 
+ // Zoom controls (separados por modo)
+ const handleZoomIn = () => {
+  if (!isFullscreen) {
+   setNormalZoomDensity(prev => Math.min(prev + 0.25, 2.0));
+  } else {
+   setCanvasZoomDensity(prev => Math.min(prev + 0.25, 3.0));
+  }
+ };
+
+ const handleZoomOut = () => {
+  if (!isFullscreen) {
+   setNormalZoomDensity(prev => Math.max(prev - 0.25, 0.5));
+  } else {
+   // Canvas: MÍNIMO 1.0x
+   setCanvasZoomDensity(prev => Math.max(prev - 0.25, 1.0));
+  }
+ };
+
+ const handleResetZoom = () => {
+  if (!isFullscreen) {
+   setNormalZoomDensity(1.0);
+  } else {
+   setCanvasZoomDensity(1.0);
+  }
+ };
+
  const getPosition = (dateStr: string) => {
   const date = parseLocalDate(dateStr);
   const start = dates[0];
@@ -81,7 +266,7 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
   const diffTime = date.getTime() - start.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
-  return diffDays * CELL_WIDTH;
+  return diffDays * CONFIG.CELL_WIDTH;
  };
 
  const getWidth = (checkIn: string, checkOut: string) => {
@@ -91,7 +276,7 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
   const diffTime = end.getTime() - start.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
-  return Math.max(diffDays * CELL_WIDTH, CELL_WIDTH / 3);
+  return Math.max(diffDays * CONFIG.CELL_WIDTH, CONFIG.CELL_WIDTH / 3);
  };
 
  const isVisible = (res: CalendarReservation) => {
@@ -149,12 +334,21 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
    if (today < start) return -1;
    const diffTime = today.getTime() - start.getTime();
    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-   if (diffDays >= DAYS_TO_SHOW) return -1;
-   return (diffDays * CELL_WIDTH) + (CELL_WIDTH / 2);
- }, [dates, CELL_WIDTH, DAYS_TO_SHOW]);
+   if (diffDays >= CONFIG.DAYS) return -1;
+   return (diffDays * CONFIG.CELL_WIDTH) + (CONFIG.CELL_WIDTH / 2);
+ }, [dates, CONFIG.CELL_WIDTH, CONFIG.DAYS]);
+
+ // Get zoom display text (formato multiplicador)
+ const getZoomText = () => {
+  const activeZoom = isFullscreen ? canvasZoomDensity : normalZoomDensity;
+  return `${activeZoom.toFixed(1)}x`;
+ };
 
  return (
-  <div className="flex flex-col h-full bg-white border-t border-gray-200 animate-fade-in">
+  <div 
+   ref={fullscreenWrapperRef}
+   className={`flex flex-col bg-white border-t border-gray-200 animate-fade-in ${isFullscreen ? 'fixed inset-0 z-50' : 'h-full'}`}
+  >
    
    {/* Controls Bar */}
    <div className="flex flex-col items-center justify-between flex-shrink-0 gap-3 p-3 bg-white border-b border-gray-200 md:flex-row">
@@ -179,27 +373,52 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
       </button>
      </div>
      
-     {/* Zoom Control */}
+     {/* Zoom Control + Fullscreen Button */}
      <div className="flex items-center gap-4">
+       {/* Zoom Controls (ambos os modos) */}
        <div className="flex items-center gap-1 p-1 border border-gray-200 rounded-lg bg-gray-50">
          <button 
-          onClick={() => setZoomLevel(Math.max(1, zoomLevel - 1))} 
-          disabled={zoomLevel === 1}
+          onClick={handleZoomOut}
+          disabled={isFullscreen ? canvasZoomDensity <= 1.0 : normalZoomDensity <= 0.5}
           className="p-1 text-gray-600 rounded hover:bg-white disabled:opacity-30"
-          title="Diminuir Zoom (Mais dias)"
+          title="Zoom Out"
          >
            <ZoomOut size={16} />
          </button>
-         <span className="text-[10px] font-bold w-4 text-center">{zoomLevel}x</span>
+         <span className="text-[10px] font-bold px-2 text-center min-w-[50px]">{getZoomText()}</span>
          <button 
-          onClick={() => setZoomLevel(Math.min(3, zoomLevel + 1))} 
-          disabled={zoomLevel === 3}
+          onClick={handleZoomIn}
+          disabled={isFullscreen ? canvasZoomDensity >= 3.0 : normalZoomDensity >= 2.0}
           className="p-1 text-gray-600 rounded hover:bg-white disabled:opacity-30"
-          title="Aumentar Zoom (Menos dias)"
+          title="Zoom In"
          >
            <ZoomIn size={16} />
          </button>
+         <button
+          onClick={handleResetZoom}
+          className="ml-1 px-2 py-1 text-[10px] font-medium text-brand-600 rounded hover:bg-white"
+          title="Reset Zoom"
+         >
+           Reset
+         </button>
        </div>
+
+       {/* Fullscreen Toggle Button */}
+       <button
+         onClick={() => {
+          setIsFullscreen(!isFullscreen);
+          if (!isFullscreen) {
+           setCanvasZoomDensity(1.0); // Reset canvas zoom when entering fullscreen
+          }
+         }}
+         className="flex items-center gap-2 p-2 text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-brand-300 hover:text-brand-600 transition-colors"
+         title={isFullscreen ? "Sair do Modo Tela Cheia" : "Ativar Modo Tela Cheia"}
+       >
+         {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+         <span className="text-xs font-medium hidden md:inline">
+           {isFullscreen ? "Sair" : "Tela Cheia"}
+         </span>
+       </button>
      </div>
    </div>
 
@@ -236,19 +455,28 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
    </div>
 
    {/* Main Scroll Container */}
-   <div className="relative flex-1 overflow-auto custom-scrollbar">
+   <div 
+     ref={canvasContainerRef}
+     className="relative flex-1 custom-scrollbar"
+     style={{
+       overflow: isFullscreen && canvasZoomDensity === 1.0 ? 'hidden' : 'auto'
+     }}
+   >
      <div className="min-w-fit">
        
        {/* Sticky Headers Wrapper */}
        <div className="sticky top-0 z-30 bg-white shadow-sm">
          {/* Month Row */}
          <div className="flex border-b border-gray-100">
-           <div className="w-40 min-w-[160px] sticky left-0 z-40 bg-gray-50 border-r border-gray-200"></div>
+           <div 
+            className="sticky left-0 z-40 bg-gray-50 border-r border-gray-200"
+            style={{ width: CONFIG.PROPERTY_COLUMN_WIDTH, minWidth: CONFIG.PROPERTY_COLUMN_WIDTH }}
+           ></div>
            {monthGroups.map((group, idx) => (
              <div 
               key={idx}
               className="flex items-center justify-center py-1 text-xs font-bold tracking-wider text-gray-600 uppercase border-r border-gray-200 bg-gray-50"
-              style={{ width: group.count * CELL_WIDTH }}
+              style={{ width: group.count * CONFIG.CELL_WIDTH }}
              >
                {group.name}
              </div>
@@ -257,7 +485,14 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
 
          {/* Days Row */}
          <div className="flex border-b border-gray-200">
-           <div className="w-40 min-w-[160px] sticky left-0 z-40 bg-white border-r border-gray-200 p-2 flex items-center font-bold text-xs text-gray-500 uppercase tracking-wider shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]">
+           <div 
+            className="sticky left-0 z-40 bg-white border-r border-gray-200 p-2 flex items-center font-bold uppercase tracking-wider shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
+            style={{ 
+             width: CONFIG.PROPERTY_COLUMN_WIDTH, 
+             minWidth: CONFIG.PROPERTY_COLUMN_WIDTH,
+             fontSize: isFullscreen && CONFIG.PROPERTY_COLUMN_WIDTH < 100 ? '9px' : '11px'
+            }}
+           >
              Imóvel
            </div>
            <div className="flex">
@@ -268,13 +503,21 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
                return (
                  <div 
                   key={i} 
-                  style={{ width: CELL_WIDTH }} 
+                  style={{ width: CONFIG.CELL_WIDTH }} 
                   className={`flex flex-col items-center justify-center border-r border-gray-200 py-1 ${isTodayDate ? 'bg-brand-50' : isWeekend ? 'bg-gray-100/50' : ''}`}
                  >
-                   <span className={`text-[9px] uppercase ${isTodayDate ? 'text-brand-600 font-bold' : 'text-gray-400'}`}>
-                     {d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
-                   </span>
-                   <span className={`text-xs font-bold ${isTodayDate ? 'text-brand-700' : 'text-gray-700'}`}>
+                   {CONFIG.CELL_WIDTH >= 40 && (
+                     <span 
+                      className={`uppercase ${isTodayDate ? 'text-brand-600 font-bold' : 'text-gray-400'}`}
+                      style={{ fontSize: Math.max(8, CONFIG.CELL_WIDTH / 6) }}
+                     >
+                       {d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
+                     </span>
+                   )}
+                   <span 
+                    className={`font-bold ${isTodayDate ? 'text-brand-700' : 'text-gray-700'}`}
+                    style={{ fontSize: Math.max(10, CONFIG.CELL_WIDTH / 4) }}
+                   >
                      {d.getDate()}
                    </span>
                  </div>
@@ -291,7 +534,7 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
          {todayPosition > 0 && (
            <div 
             className="absolute top-0 bottom-0 z-10 border-l-2 border-red-400 opacity-50 pointer-events-none"
-            style={{ left: `calc(160px + ${todayPosition}px)` }} 
+            style={{ left: `calc(${CONFIG.PROPERTY_COLUMN_WIDTH}px + ${todayPosition}px)` }} 
            ></div>
          )}
 
@@ -299,10 +542,28 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
            const rowReservations = unit.reservations.filter(r => isVisible(r) && isChannelVisible(r));
 
            return (
-             <div key={unit.id} className="flex h-12 transition-colors border-b border-gray-100 hover:bg-gray-50/50">
+             <div 
+              key={unit.id}
+              className="flex border-b border-gray-200 transition-colors hover:bg-gray-50/50"
+              style={{ height: CONFIG.ROW_HEIGHT }}
+             >
                {/* Property Column (Sticky Left) */}
-               <div className="w-40 min-w-[160px] sticky left-0 z-20 bg-white border-r border-gray-200 flex items-center px-3 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)]">
-                 <span className="text-xs font-bold text-gray-700 truncate" title={unit.name || unit.code}>{unit.code}</span>
+               <div 
+                className="sticky left-0 z-20 bg-white border-r border-gray-200 flex items-center shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)]"
+                style={{ 
+                 width: CONFIG.PROPERTY_COLUMN_WIDTH, 
+                 minWidth: CONFIG.PROPERTY_COLUMN_WIDTH,
+                 paddingLeft: Math.max(6, CONFIG.PROPERTY_COLUMN_WIDTH * 0.05),
+                 paddingRight: Math.max(6, CONFIG.PROPERTY_COLUMN_WIDTH * 0.05)
+                }}
+               >
+                 <span 
+                  className="font-bold text-gray-700 truncate" 
+                  title={unit.name || unit.code}
+                  style={{ 
+                   fontSize: CONFIG.PROPERTY_COLUMN_WIDTH < 120 ? '9px' : CONFIG.PROPERTY_COLUMN_WIDTH < 160 ? '10px' : '11px'
+                  }}
+                 >{unit.code}</span>
                </div>
 
                {/* Row Timeline */}
@@ -313,7 +574,7 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
                    return (
                      <div
                       key={i}
-                      style={{ width: CELL_WIDTH }}
+                      style={{ width: CONFIG.CELL_WIDTH }}
                       className={`border-r border-gray-100 h-full ${isWeekend ? 'bg-gray-50/30' : ''}`}
                      ></div>
                    );
