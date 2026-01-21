@@ -19,6 +19,15 @@ import {
   AgendaGroup,
   ReservationWithDailyStatus,
 } from '../services/staysDataMapper';
+import { perfMonitor } from '../utils/performanceUtils';
+import { usePageVisibility } from './usePageVisibility';
+import {
+  getRefetchInterval,
+  shouldRefetchInBackground,
+  shouldRefetchOnWindowFocus,
+  generateDataFingerprint,
+  AUTO_REFRESH_CONFIG,
+} from '../utils/refetchPolicy';
 
 interface UseStaysDataReturn {
   // Raw API data
@@ -46,8 +55,8 @@ interface UseStaysDataReturn {
 }
 
 // Cache configuration
-const STALE_TIME = 5 * 60 * 1000;     // 5 minutes - data considered fresh
-const REFETCH_INTERVAL = 5 * 60 * 1000; // 5 minutes - auto-refresh interval
+const STALE_TIME = 10 * 60 * 1000;     // 10 minutes - data considered fresh
+// Auto-refresh inteligente: intervalos por rota, pausa quando aba oculta
 
 /**
  * Returns current date as YYYY-MM-DD string
@@ -72,21 +81,43 @@ function formatDateStr(date: Date): string {
 
 interface UseStaysDataOptions {
   /**
-   * Optional start date for filtering data (YYYY-MM-DD)
-   * If not provided, backend will use default range (-30 days)
+   * Start date for filtering data (YYYY-MM-DD)
+   * REQUIRED - prevents loading unnecessary data
    */
-  from?: string;
+  from: string;
   
   /**
-   * Optional end date for filtering data (YYYY-MM-DD)
-   * If not provided, backend will use default range (+30 days for dashboard, +3 months for calendar)
+   * End date for filtering data (YYYY-MM-DD)
+   * REQUIRED - prevents loading unnecessary data
    */
-  to?: string;
+  to: string;
+  
+  /**
+   * Route identifier for determining refetch interval
+   * Different routes have different update frequencies
+   */
+  routeIdentifier?: string;
 }
 
-export function useStaysData(options: UseStaysDataOptions = {}): UseStaysDataReturn {
+export function useStaysData(options: UseStaysDataOptions): UseStaysDataReturn {
   const queryClient = useQueryClient();
-  const { from, to } = options;
+  const { from, to, routeIdentifier = 'default' } = options;
+  
+  // 🔄 Auto-refresh inteligente
+  const isPageVisible = usePageVisibility();
+  const lastFingerprintRef = useRef<string>('');
+
+  // Validation: from/to são obrigatórios
+  if (!from || !to) {
+    throw new Error(
+      '[useStaysData] from/to são obrigatórios. Use getDefaultPeriodForRoute() para obter período padrão.'
+    );
+  }
+  
+  // Determinar intervalo de refetch baseado na rota
+  const refetchInterval = AUTO_REFRESH_CONFIG.enabled 
+    ? getRefetchInterval(routeIdentifier)
+    : false;
 
   // Track current date to detect day changes (midnight crossing)
   const [currentDateStr, setCurrentDateStr] = useState(getTodayStr);
@@ -97,16 +128,56 @@ export function useStaysData(options: UseStaysDataOptions = {}): UseStaysDataRet
   const {
     data,
     isLoading,
-    isFetching, // Destructure isFetching
+    isFetching,
     error,
     dataUpdatedAt,
     refetch,
   } = useQuery({
-    queryKey: ['stays-all-data', from, to],
-    queryFn: () => getAllData(from, to),
+    queryKey: ['stays-all-data', from, to, routeIdentifier],
+    queryFn: async () => {
+      const fetchStart = performance.now();
+      
+      perfMonitor.start('API fetch');
+      const result = await getAllData(from, to);
+      const fetchEnd = performance.now();
+      perfMonitor.end('API fetch');
+      
+      // 📊 DIAGNÓSTICO DETALHADO (apenas DEV)
+      if (import.meta.env.DEV) {
+        const ttfb = fetchEnd - fetchStart;
+        const payloadSize = JSON.stringify(result).length;
+        const payloadSizeMB = (payloadSize / 1024 / 1024).toFixed(2);
+        
+        console.group(`📡 [Fetch Diagnostic] ${routeIdentifier}`);
+        console.log(`⏱️  TTFB (server response): ${ttfb.toFixed(0)}ms`);
+        console.log(`📦 Payload size: ${payloadSizeMB}MB (${payloadSize.toLocaleString()} bytes)`);
+        console.log(`📅 Period: ${from} → ${to}`);
+        console.log(`🔑 QueryKey: ['stays-all-data', '${from}', '${to}', '${routeIdentifier}']`);
+        console.log(`📊 Calendar units: ${result.calendar?.units?.length || 0}`);
+        console.log(`📊 Dashboard week data: ${result.dashboard?.weekData?.length || 0} days`);
+        console.groupEnd();
+      }
+      // 🎯 Fingerprinting: evita reprocessamento se dados não mudaram
+      const newFingerprint = generateDataFingerprint(result);
+      
+      if (lastFingerprintRef.current === newFingerprint) {
+        console.log('🔄 [Auto-refresh] Dados não mudaram, mantendo referências');
+      } else {
+        console.log('✨ [Auto-refresh] Dados atualizados:', newFingerprint);
+        lastFingerprintRef.current = newFingerprint;
+      }
+      
+      return result;
+    },
     staleTime: STALE_TIME,
-    refetchInterval: REFETCH_INTERVAL,
-    refetchIntervalInBackground: true,
+    
+    // 🔄 Auto-refresh inteligente
+    refetchInterval: refetchInterval,
+    refetchIntervalInBackground: shouldRefetchInBackground(routeIdentifier),
+    refetchOnWindowFocus: shouldRefetchOnWindowFocus(routeIdentifier),
+    
+    // ⏸️ Pausar quando aba oculta
+    enabled: AUTO_REFRESH_CONFIG.pauseWhenHidden ? isPageVisible : true,
   });
 
   // Check for day change (midnight crossing)
@@ -129,14 +200,32 @@ export function useStaysData(options: UseStaysDataOptions = {}): UseStaysDataRet
   // Depends on currentDateStr to force re-compute when day changes
   const agendaGroups = useMemo<AgendaGroup[]>(() => {
     if (!data?.dashboard) return [];
-    // console.log(`[useStaysData] Computing agendaGroups for date: ${currentDateStr}`);
-    return mapDashboardToAgendaGroups(data.dashboard);
+    const startTime = performance.now();
+    perfMonitor.start('mapDashboardToAgendaGroups');
+    const result = mapDashboardToAgendaGroups(data.dashboard);
+    perfMonitor.end('mapDashboardToAgendaGroups');
+    
+    if (import.meta.env.DEV) {
+      const duration = performance.now() - startTime;
+      console.log(`🔄 [Transform] mapDashboardToAgendaGroups: ${duration.toFixed(0)}ms → ${result.length} groups`);
+    }
+    return result;
   }, [data?.dashboard, currentDateStr]);
 
   // Transform calendar data to reservations array
   const reservations = useMemo<ReservationWithDailyStatus[]>(() => {
     if (!data?.calendar) return [];
-    return mapCalendarToReservations(data.calendar);
+    const startTime = performance.now();
+    perfMonitor.start('mapCalendarToReservations');
+    const result = mapCalendarToReservations(data.calendar);
+    perfMonitor.end('mapCalendarToReservations');
+    
+    if (import.meta.env.DEV) {
+      const duration = performance.now() - startTime;
+      console.log(`🔄 [Transform] mapCalendarToReservations: ${duration.toFixed(0)}ms → ${result.length} reservations`);
+      console.log(perfMonitor.getSummary());
+    }
+    return result;
   }, [data?.calendar]);
 
   // Convert sync info to SyncStatus type for backward compatibility
