@@ -14,13 +14,15 @@ import { generateId, formatCurrency, formatDatePtBR } from './utils';
 import { useStaysData } from './hooks/useStaysData';
 import { useInventoryData } from './hooks/useInventoryData';
 import { usePropertiesData } from './hooks/usePropertiesData';
-import { triggerSync, getSyncStatus } from './services/staysApiService';
+import { triggerSync, getSyncStatus, getAllData } from './services/staysApiService';
 import { CONCIERGE_SERVICE_TYPES } from './constants';
 import PlatformIcon from './components/PlatformIcon';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 import { playSuccessSound } from './utils/soundUtils';
 import { canAccessView, canAccessModule, getFirstAllowedModule, getDefaultViewForModule as getDefaultViewFromPermissions, getAccessDeniedMessage } from './utils/permissions';
+import { getDefaultPeriodForRoute } from './utils/performanceUtils';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Icons
 import {
@@ -47,10 +49,21 @@ import ReservationModals from './components/modals/ReservationModals';
 import { useNotifications } from './hooks/app/useNotifications';
 import { useDataSubscriptions } from './hooks/app/useDataSubscriptions';
 import { useNewReservationDetector } from './hooks/features/useNewReservationDetector';
+import { useNewMaintenanceTicketDetector } from './hooks/features/useNewMaintenanceTicketDetector';
 import { useTicketNotifications } from './hooks/features/useTicketNotifications';
 import { useWebRTCCall } from './hooks/features/useWebRTCCall';
 import { useMaintenanceFilters, PeriodPreset } from './hooks/features/useMaintenanceFilters';
 import { useMaintenancePagination } from './hooks/features/useMaintenancePagination';
+import { notificationSessionManager } from './services/notificationSessionManager';
+import { 
+  setNotificationCenterCallback,
+  notifyReservationToast,
+  notifyReservationsToastMany,
+  notifyMaintenanceTicketToast,
+  notifyMaintenanceTicketsToastMany,
+  ToastNotification 
+} from './utils/notificationToastHelpers';
+import { ToastContainer } from './components/Toast';
 
 // Context Providers
 import { AppProviders } from './contexts/AppProviders';
@@ -309,10 +322,47 @@ function AppContent() {
   // Guest Status Filter (default: ['ALL'] - todos os status)
   const [guestSelectedStatuses, setGuestSelectedStatuses] = useState<string[]>(['ALL']);
 
+  // 🚀 FASE 1: Períodos dinâmicos por rota/módulo
+  // Compute data period based on current module and view
+  const staysDataPeriod = useMemo(() => {
+    // Determine route identifier for period calculation
+    let routeIdentifier: string;
+    
+    if (viewMode === 'map') {
+      // Canvas mode: 6 meses (180 dias) a partir de hoje
+      routeIdentifier = 'canvas';
+    } else if (activeModule === 'maintenance') {
+      // Manutenção: próximos 30 dias
+      routeIdentifier = 'maintenance';
+    } else if (activeModule === 'guest' || viewMode === 'guest-crm') {
+      // Hóspedes: últimos 7 dias até próximos 30 dias
+      routeIdentifier = 'guest';
+    } else if (activeModule === 'reservations' || viewMode === 'calendar') {
+      // Reservas/Calendário: mês atual até +3 meses
+      routeIdentifier = 'reservations';
+    } else if (activeModule === 'management') {
+      // Gestão: últimos 30 dias até próximos 60 dias
+      routeIdentifier = 'management';
+    } else {
+      // Fallback: padrão (-30d até +90d)
+      routeIdentifier = 'default';
+    }
+    
+    const period = getDefaultPeriodForRoute(routeIdentifier, viewMode === 'map' ? 'canvas' : 'normal');
+    
+    // 🔄 Adicionar routeIdentifier para auto-refresh inteligente
+    return {
+      ...period,
+      routeIdentifier,
+    };
+  }, [activeModule, viewMode]);
+
   // Stays API Data (from stays-api backend)
-  // STRATEGY: Fetch ALL data from API (backend has -365 to +365 days range)
-  // Filter happens ONLY in frontend (useGuestPeriodFilter hook)
-  // This ensures we always have all data available and filtering is instant
+  // � AUTO-REFRESH INTELIGENTE:
+  // - Períodos otimizados por rota (não carrega 2 anos)
+  // - Atualização automática com intervalos por módulo (3-8 min)
+  // - Pausa quando aba está oculta (economiza recursos)
+  // - Fingerprinting evita reprocessamento quando dados não mudaram
   const {
     agendaGroups: staysAgendaGroups,
     reservations: staysReservations,
@@ -322,7 +372,44 @@ function AppContent() {
     isFetching: staysRefetching,
     error: staysError,
     refresh: refreshStaysData,
-  } = useStaysData();
+  } = useStaysData(staysDataPeriod);
+
+  // 🚀 PREFETCH INTELIGENTE: pré-carregar próximo módulo provável
+  const queryClient = useQueryClient();
+  
+  useEffect(() => {
+    // Só fazer prefetch se não estiver carregando e aba estiver visível
+    if (staysLoading || staysRefetching || typeof document === 'undefined') return;
+    if (document.visibilityState !== 'visible') return;
+    
+    // Mapa de próximos módulos prováveis
+    const nextModuleMap: Record<string, string> = {
+      'maintenance': 'guest',      // Manutenção → Guest
+      'guest': 'reservations',     // Guest → Reservas
+      'reservations': 'management', // Reservas → Management
+    };
+    
+    const nextRoute = nextModuleMap[staysDataPeriod.routeIdentifier];
+    if (!nextRoute) return;
+    
+    const nextPeriod = {
+      ...getDefaultPeriodForRoute(nextRoute, 'normal'),
+      routeIdentifier: nextRoute,
+    };
+    
+    // Prefetch com delay de 2s após carregamento atual
+    const timer = setTimeout(() => {
+      console.log(`🚀 [Prefetch] Pré-carregando próximo módulo: ${nextRoute}`);
+      
+      queryClient.prefetchQuery({
+        queryKey: ['stays-all-data', nextPeriod.from, nextPeriod.to, nextPeriod.routeIdentifier],
+        queryFn: () => getAllData(nextPeriod.from, nextPeriod.to),
+        staleTime: 5 * 60 * 1000, // 5 minutos
+      });
+    }, 2000);
+    
+    return () => clearTimeout(timer);
+  }, [staysDataPeriod.routeIdentifier, staysLoading, staysRefetching, queryClient]);
 
   // Combine loading states
   const isGlobalLoading = staysLoading || staysRefetching;
@@ -331,6 +418,27 @@ function AppContent() {
   useEffect(() => {
     initializeFirebase();
   }, []);
+
+  // 🔔 Initialize notification session on mount
+  useEffect(() => {
+    notificationSessionManager.initialize();
+    
+    // Connect NotificationCenter callback
+    setNotificationCenterCallback(addNotification);
+    
+    return () => {
+      // Cleanup on unmount
+    };
+  }, [addNotification]);
+
+  // 🔔 Reset notification session on login
+  useEffect(() => {
+    if (currentUser) {
+      // Criar nova sessão ao fazer login
+      notificationSessionManager.createNewSession();
+      console.log('✨ [App] Nova sessão de notificações criada para:', currentUser.name);
+    }
+  }, [currentUser?.id]); // Apenas quando usuário mudar
 
   // Checkout Automation Service - Automatically creates maintenance tickets for checkouts
   useEffect(() => {
@@ -357,24 +465,59 @@ function AppContent() {
     storageService.logs.add(logEntry);
   }, [currentUser]);
 
-  // New Reservation Detector Hook
-  // Create a signature from filter state to detect changes and reset detector
-  const filterSignature = `${guestPeriodPreset}-${guestCustomStartDate}-${guestCustomEndDate}`;
-  
+  // 🍞 Toast notifications state
+  const [toastNotifications, setToastNotifications] = useState<ToastNotification[]>([]);
+
+  const handleRemoveToast = useCallback((id: string) => {
+    setToastNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  const handleAddToast = useCallback((notification: ToastNotification) => {
+    setToastNotifications(prev => [...prev, notification]);
+  }, []);
+
+  // 🔔 New Reservation Detector Hook (Reescrito)
   useNewReservationDetector({
     staysReservations,
     currentUser,
-    onNewReservation: (newOnes) => {
-      setNewReservations(newOnes);
+    hasPermission: (perm: string) => canAccessModule(currentUser, perm as any),
+    onNewReservations: (newReservations) => {
+      if (newReservations.length === 1) {
+        // 1 reserva: toast com detalhes completos
+        const toast = notifyReservationToast(newReservations[0]);
+        handleAddToast(toast);
+      } else {
+        // Múltiplas: toast resumido
+        const toast = notifyReservationsToastMany(newReservations);
+        handleAddToast(toast);
+      }
+      
+      // Opcional: manter confetti
+      setNewReservations(newReservations);
       setShowConfetti(true);
       setTimeout(() => {
         setShowConfetti(false);
         setNewReservations([]);
-      }, 10000);
+      }, 5000);
     },
-    addLog,
-    addNotification,
-    filterSignature, // Reset detector when filter changes to prevent false alerts
+  });
+
+  // 🔧 New Maintenance Ticket Detector Hook
+  useNewMaintenanceTicketDetector({
+    tickets,
+    currentUser,
+    hasPermission: (perm: string) => canAccessModule(currentUser, perm as any),
+    onNewTickets: (newTickets) => {
+      if (newTickets.length === 1) {
+        // 1 ticket: toast com detalhes
+        const toast = notifyMaintenanceTicketToast(newTickets[0]);
+        handleAddToast(toast);
+      } else {
+        // Múltiplos: toast resumido
+        const toast = notifyMaintenanceTicketsToastMany(newTickets);
+        handleAddToast(toast);
+      }
+    },
   });
 
   // Ticket Notifications Hook
@@ -637,6 +780,12 @@ function AppContent() {
 
   return (
     <div className="flex h-screen bg-[#fdf8f6] text-gray-800 font-sans overflow-hidden">
+      {/* 🍞 Toast Notifications Container */}
+      <ToastContainer 
+        notifications={toastNotifications}
+        onRemove={handleRemoveToast}
+      />
+
       {mobileMenuOpen && (
         <div 
           className="fixed inset-0 z-40 bg-black/50 md:hidden animate-fade-in"
