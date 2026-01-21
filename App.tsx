@@ -49,10 +49,21 @@ import ReservationModals from './components/modals/ReservationModals';
 import { useNotifications } from './hooks/app/useNotifications';
 import { useDataSubscriptions } from './hooks/app/useDataSubscriptions';
 import { useNewReservationDetector } from './hooks/features/useNewReservationDetector';
+import { useNewMaintenanceTicketDetector } from './hooks/features/useNewMaintenanceTicketDetector';
 import { useTicketNotifications } from './hooks/features/useTicketNotifications';
 import { useWebRTCCall } from './hooks/features/useWebRTCCall';
 import { useMaintenanceFilters, PeriodPreset } from './hooks/features/useMaintenanceFilters';
 import { useMaintenancePagination } from './hooks/features/useMaintenancePagination';
+import { notificationSessionManager } from './services/notificationSessionManager';
+import { 
+  setNotificationCenterCallback,
+  notifyReservationToast,
+  notifyReservationsToastMany,
+  notifyMaintenanceTicketToast,
+  notifyMaintenanceTicketsToastMany,
+  ToastNotification 
+} from './utils/notificationToastHelpers';
+import { ToastContainer } from './components/Toast';
 
 // Context Providers
 import { AppProviders } from './contexts/AppProviders';
@@ -408,6 +419,27 @@ function AppContent() {
     initializeFirebase();
   }, []);
 
+  // 🔔 Initialize notification session on mount
+  useEffect(() => {
+    notificationSessionManager.initialize();
+    
+    // Connect NotificationCenter callback
+    setNotificationCenterCallback(addNotification);
+    
+    return () => {
+      // Cleanup on unmount
+    };
+  }, [addNotification]);
+
+  // 🔔 Reset notification session on login
+  useEffect(() => {
+    if (currentUser) {
+      // Criar nova sessão ao fazer login
+      notificationSessionManager.createNewSession();
+      console.log('✨ [App] Nova sessão de notificações criada para:', currentUser.name);
+    }
+  }, [currentUser?.id]); // Apenas quando usuário mudar
+
   // Checkout Automation Service - Automatically creates maintenance tickets for checkouts
   useEffect(() => {
     if (isDbConnected) {
@@ -433,24 +465,59 @@ function AppContent() {
     storageService.logs.add(logEntry);
   }, [currentUser]);
 
-  // New Reservation Detector Hook
-  // Create a signature from filter state to detect changes and reset detector
-  const filterSignature = `${guestPeriodPreset}-${guestCustomStartDate}-${guestCustomEndDate}`;
-  
+  // 🍞 Toast notifications state
+  const [toastNotifications, setToastNotifications] = useState<ToastNotification[]>([]);
+
+  const handleRemoveToast = useCallback((id: string) => {
+    setToastNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  const handleAddToast = useCallback((notification: ToastNotification) => {
+    setToastNotifications(prev => [...prev, notification]);
+  }, []);
+
+  // 🔔 New Reservation Detector Hook (Reescrito)
   useNewReservationDetector({
     staysReservations,
     currentUser,
-    onNewReservation: (newOnes) => {
-      setNewReservations(newOnes);
+    hasPermission: (perm: string) => canAccessModule(currentUser, perm as any),
+    onNewReservations: (newReservations) => {
+      if (newReservations.length === 1) {
+        // 1 reserva: toast com detalhes completos
+        const toast = notifyReservationToast(newReservations[0]);
+        handleAddToast(toast);
+      } else {
+        // Múltiplas: toast resumido
+        const toast = notifyReservationsToastMany(newReservations);
+        handleAddToast(toast);
+      }
+      
+      // Opcional: manter confetti
+      setNewReservations(newReservations);
       setShowConfetti(true);
       setTimeout(() => {
         setShowConfetti(false);
         setNewReservations([]);
-      }, 10000);
+      }, 5000);
     },
-    addLog,
-    addNotification,
-    filterSignature, // Reset detector when filter changes to prevent false alerts
+  });
+
+  // 🔧 New Maintenance Ticket Detector Hook
+  useNewMaintenanceTicketDetector({
+    tickets,
+    currentUser,
+    hasPermission: (perm: string) => canAccessModule(currentUser, perm as any),
+    onNewTickets: (newTickets) => {
+      if (newTickets.length === 1) {
+        // 1 ticket: toast com detalhes
+        const toast = notifyMaintenanceTicketToast(newTickets[0]);
+        handleAddToast(toast);
+      } else {
+        // Múltiplos: toast resumido
+        const toast = notifyMaintenanceTicketsToastMany(newTickets);
+        handleAddToast(toast);
+      }
+    },
   });
 
   // Ticket Notifications Hook
@@ -713,6 +780,12 @@ function AppContent() {
 
   return (
     <div className="flex h-screen bg-[#fdf8f6] text-gray-800 font-sans overflow-hidden">
+      {/* 🍞 Toast Notifications Container */}
+      <ToastContainer 
+        notifications={toastNotifications}
+        onRemove={handleRemoveToast}
+      />
+
       {mobileMenuOpen && (
         <div 
           className="fixed inset-0 z-40 bg-black/50 md:hidden animate-fade-in"
