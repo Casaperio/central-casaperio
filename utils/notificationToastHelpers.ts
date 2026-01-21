@@ -74,11 +74,16 @@ export function notifyReservationToast(reservation: Reservation): ToastNotificat
 export function notifyReservationsToastMany(reservations: Reservation[]): ToastNotification {
   const count = reservations.length;
   
+  // Mensagem gramaticalmente correta
+  const message = count === 1 
+    ? `1 nova reserva chegou!`
+    : `${count} novas reservas chegaram!`;
+  
   const notification: ToastNotification = {
     id: `reservations-${Date.now()}`,
     type: 'reservation',
-    title: `🎉 ${count} Novas Reservas!`,
-    message: `${count} nova${count > 1 ? 's' : ''} reserva${count > 1 ? 's' : ''} chegou${count > 1 ? 'aram' : 'ou'}!`,
+    title: `🎉 ${count} Nova${count > 1 ? 's' : ''} Reserva${count > 1 ? 's' : ''}!`,
+    message: message,
     data: reservations,
     timestamp: new Date().toISOString(),
   };
