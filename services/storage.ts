@@ -5,7 +5,7 @@ import {
   GuestTip, GuestFeedback, GuestNote, ReservationOverrides, MonitoredFlight, InventoryItem,
   InventoryTransaction, Delivery, OfficeSupply, CompanyAsset, WorkShift,
   ConciergeOffer, Supplier, ServiceTypeDefinition,
-  Board, BoardColumn, BoardCard, AfterHoursConfig, ChatMessage, CallSession
+  Board, BoardColumn, BoardCard, AfterHoursConfig, ChatMessage, CallSession, AppModule
 } from '../types';
 import { MOCK_PROPERTIES, PRIORITIES, SERVICE_TYPES, MOCK_USERS } from '../constants';
 import { getReservationOverrideKey } from '../utils';
@@ -732,21 +732,138 @@ export const storageService = {
       });
     },
 
+    /**
+     * Busca usuário por email normalizado
+     */
+    getByEmail: async (email: string): Promise<UserWithPassword | null> => {
+      ensureDb();
+      const normalizedEmail = email.toLowerCase().trim();
+      const snapshot = await db.collection(COLLECTIONS.USERS)
+        .where('email', '==', normalizedEmail)
+        .limit(1)
+        .get();
+      
+      if (snapshot.empty) return null;
+      const doc = snapshot.docs[0];
+      return { id: doc.id, ...doc.data() } as UserWithPassword;
+    },
+
+    /**
+     * Adiciona ou atualiza usuário (upsert por email)
+     * Previne duplicados ao verificar se o email já existe
+     */
+    addOrUpdate: async (user: UserWithPassword): Promise<void> => {
+      ensureDb();
+      const normalizedEmail = user.email.toLowerCase().trim();
+      const existing = await storageService.users.getByEmail(normalizedEmail);
+      
+      if (existing) {
+        // Atualiza usuário existente (merge)
+        const { id, ...data } = user;
+        await db.collection(COLLECTIONS.USERS).doc(existing.id).update(cleanData({
+          ...data,
+          email: normalizedEmail
+        }));
+      } else {
+        // Cria novo usuário
+        const { id, ...data } = user;
+        await db.collection(COLLECTIONS.USERS).add(cleanData({
+          ...data,
+          email: normalizedEmail
+        }));
+      }
+    },
+
     add: async (user: UserWithPassword) => {
       ensureDb();
       const { id, ...data } = user;
-      await db.collection(COLLECTIONS.USERS).add(cleanData(data));
+      const normalizedEmail = data.email.toLowerCase().trim();
+      await db.collection(COLLECTIONS.USERS).add(cleanData({
+        ...data,
+        email: normalizedEmail
+      }));
     },
 
     update: async (user: Partial<UserWithPassword> & { id: string }) => {
       ensureDb();
       const { id, ...data } = user;
+      if (data.email) {
+        data.email = data.email.toLowerCase().trim();
+      }
       await db.collection(COLLECTIONS.USERS).doc(id).update(cleanData(data));
     },
 
     delete: async (id: string) => {
       ensureDb();
       await db.collection(COLLECTIONS.USERS).doc(id).delete();
+    },
+
+    /**
+     * Remove usuários duplicados mantendo apenas 1 por email
+     * Retorna número de duplicados removidos
+     */
+    deduplicateByEmail: async (): Promise<{ removed: number; kept: number; details: Array<{ email: string; duplicates: number }> }> => {
+      ensureDb();
+      
+      // Busca todos os usuários
+      const snapshot = await db.collection(COLLECTIONS.USERS).get();
+      const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserWithPassword));
+      
+      // Agrupa por email normalizado
+      const emailGroups = new Map<string, UserWithPassword[]>();
+      users.forEach(user => {
+        const normalizedEmail = user.email.toLowerCase().trim();
+        const group = emailGroups.get(normalizedEmail) || [];
+        group.push(user);
+        emailGroups.set(normalizedEmail, group);
+      });
+      
+      let removedCount = 0;
+      const details: Array<{ email: string; duplicates: number }> = [];
+      
+      // Para cada grupo com duplicados
+      for (const [email, group] of emailGroups.entries()) {
+        if (group.length <= 1) continue; // Sem duplicados
+        
+        details.push({ email, duplicates: group.length - 1 });
+        
+        // Escolhe o canônico (prioridade: Admin > mais antigo/primeiro)
+        group.sort((a, b) => {
+          // 1. Admin tem prioridade
+          if (a.role === 'Admin' && b.role !== 'Admin') return -1;
+          if (b.role === 'Admin' && a.role !== 'Admin') return 1;
+          // 2. Manter o primeiro documento (por ID)
+          return a.id.localeCompare(b.id);
+        });
+        
+        const canonical = group[0];
+        const duplicates = group.slice(1);
+        
+        // Merge permissões (união de todos os módulos)
+        const allModules = new Set<AppModule>();
+        group.forEach(u => {
+          u.allowedModules?.forEach(m => allModules.add(m));
+        });
+        
+        // Atualiza o canônico com a união de permissões
+        if (allModules.size > 0) {
+          await db.collection(COLLECTIONS.USERS).doc(canonical.id).update({
+            allowedModules: Array.from(allModules)
+          });
+        }
+        
+        // Deleta duplicados
+        for (const dup of duplicates) {
+          await db.collection(COLLECTIONS.USERS).doc(dup.id).delete();
+          removedCount++;
+        }
+      }
+      
+      return {
+        removed: removedCount,
+        kept: emailGroups.size,
+        details
+      };
     }
   },
 
@@ -968,3 +1085,8 @@ export const storageService = {
     }
   }
 };
+
+// Expor storageService globalmente para uso em componentes
+if (typeof window !== 'undefined') {
+  (window as any).storageService = storageService;
+}

@@ -13,16 +13,20 @@ export function useMaintenancePagination({ groups, resetTrigger }: UseMaintenanc
 
   // Resetar quando os filtros mudarem
   useMemo(() => {
+    console.log('📄 useMaintenancePagination - Reset trigger mudou:', resetTrigger);
     setDisplayCount(ITEMS_PER_PAGE);
   }, [resetTrigger]);
 
   // Contar total de items
   const totalItems = useMemo(() => {
-    return groups.reduce((sum, group) => sum + group.items.length, 0);
+    const total = groups.reduce((sum, group) => sum + group.items.length, 0);
+    console.log('📄 useMaintenancePagination - Total items:', total, 'Groups:', groups.length);
+    return total;
   }, [groups]);
 
   // Agrupar items paginados
   const paginatedGroups = useMemo(() => {
+    console.log('📄 useMaintenancePagination - Recalculando paginatedGroups. DisplayCount:', displayCount, 'Input groups:', groups.length);
     let itemCount = 0;
     const result: MaintenanceGroup[] = [];
 
@@ -45,6 +49,7 @@ export function useMaintenancePagination({ groups, resetTrigger }: UseMaintenanc
       }
     }
 
+    console.log('📄 useMaintenancePagination - Resultado:', result.length, 'grupos com', itemCount, 'items');
     return result;
   }, [groups, displayCount]);
 

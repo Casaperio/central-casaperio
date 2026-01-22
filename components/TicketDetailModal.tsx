@@ -357,8 +357,8 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
             onChange={(e) => setTempAssignee(e.target.value)}
            >
             <option value="">Selecione...</option>
-            {allUsers.filter(u => u.role !== 'Guest Relations').map(u => (
-             <option key={u.name} value={u.name}>{u.name}</option>
+            {allUsers.map(u => (
+             <option key={u.name} value={u.name}>{u.name} ({u.role})</option>
             ))}
            </select>
            <input 
