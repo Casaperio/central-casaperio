@@ -56,54 +56,114 @@ export function useNewMaintenanceTicketDetector({
     }
 
     // 🔍 EXECUÇÕES SEGUINTES: detectar novos tickets
+    const lastNotifiedMs = notificationSessionManager.getLastNotifiedTicketCreatedAtMs();
+    const sessionStartMs = notificationSessionManager.getSessionStartedAtMs();
+    
+    // Instrumentação DEV
+    if (import.meta.env.DEV) {
+      console.group('[Detector] 🔧 Análise de Novos Tickets');
+      console.log('📊 Total de tickets:', tickets.length);
+      console.log('🕐 Sessão iniciada em:', new Date(sessionStartMs).toLocaleString('pt-BR'));
+      console.log('🕐 Última notificação:', lastNotifiedMs ? new Date(lastNotifiedMs).toLocaleString('pt-BR') : 'nunca');
+      console.log('🌐 Online:', navigator.onLine);
+      console.log('👁️ Visível:', document.visibilityState === 'visible');
+    }
+    
     const newTickets = tickets.filter(ticket => {
       // 1. Já foi visto?
       if (notificationSessionManager.hasSeenTicket(ticket.id)) {
         return false;
       }
 
-      // 2. Foi criado após o login?
-      const createdAt = ticket.createdAt ? new Date(ticket.createdAt) : null;
-      if (!createdAt || createdAt < sessionStartedAt) {
-        // Ticket antigo, marcar como visto mas não notificar
+      // 2. Tem createdAt válido?
+      if (!ticket.createdAt) {
+        if (import.meta.env.DEV) {
+          console.warn(`⚠️ [Detector] Ticket ${ticket.id} sem createdAt, ignorando`);
+        }
         notificationSessionManager.markTicketAsSeen(ticket.id);
         return false;
       }
 
-      // 3. É realmente novo!
+      // 3. Foi criado após o login?
+      const createdAtMs = new Date(ticket.createdAt).getTime();
+      if (createdAtMs < sessionStartMs) {
+        if (import.meta.env.DEV) {
+          console.log(`⏮️ [Detector] Ticket ${ticket.id} é anterior à sessão, ignorando`);
+        }
+        notificationSessionManager.markTicketAsSeen(ticket.id);
+        return false;
+      }
+
+      // 4. Foi criado depois da última notificação?
+      if (lastNotifiedMs > 0 && createdAtMs <= lastNotifiedMs) {
+        if (import.meta.env.DEV) {
+          console.log(`⏮️ [Detector] Ticket ${ticket.id} já foi notificado anteriormente, ignorando`);
+        }
+        notificationSessionManager.markTicketAsSeen(ticket.id);
+        return false;
+      }
+
+      // 5. É realmente novo!
+      if (import.meta.env.DEV) {
+        console.log(`✅ [Detector] Ticket ${ticket.id} é NOVO:`, {
+          description: ticket.description,
+          property: ticket.propertyCode,
+          createdAt: new Date(createdAtMs).toLocaleString('pt-BR'),
+        });
+      }
       return true;
     });
+    
+    if (import.meta.env.DEV) {
+      console.log(`🎯 [Detector] Resultado: ${newTickets.length} novos tickets`);
+      console.groupEnd();
+    }
 
     // Se encontrou novos tickets
     if (newTickets.length > 0) {
-      console.log('🔧 [New Ticket Detector] Novos chamados detectados:', {
-        quantidade: newTickets.length,
-        detalhes: newTickets.map(t => ({
-          id: t.id,
-          description: t.description,
-          property: t.propertyCode,
-          createdAt: t.createdAt,
-        })),
-      });
-
       // Marcar como vistos
       newTickets.forEach(t => {
         notificationSessionManager.markTicketAsSeen(t.id);
       });
 
-      // 🔊 SOM: apenas se online + aba visível + foco
-      const shouldPlaySound = 
-        navigator.onLine && 
-        document.visibilityState === 'visible' && 
-        document.hasFocus();
-
-      if (shouldPlaySound) {
-        playSuccessSound();
-      } else {
-        console.log('🔇 [New Ticket Detector] Som desabilitado (aba não visível ou sem foco)');
+      // Atualizar cursor de última notificação
+      const latestCreatedAt = newTickets
+        .map(t => t.createdAt)
+        .filter(Boolean)
+        .sort()
+        .reverse()[0];
+      
+      if (latestCreatedAt) {
+        notificationSessionManager.updateLastNotifiedTicket(String(latestCreatedAt));
       }
 
-      // 🔔 NOTIFICAR via callback
+      // 🔊 SOM E TOAST: apenas se online + aba visível
+      const isOnline = navigator.onLine;
+      const isVisible = document.visibilityState === 'visible';
+      const shouldShowToastAndSound = isOnline && isVisible;
+
+      if (import.meta.env.DEV) {
+        console.log(`🔧 [Detector] ${newTickets.length} novos tickets detectados:`, {
+          mostrarToast: shouldShowToastAndSound,
+          motivo: !shouldShowToastAndSound 
+            ? (!isOnline ? 'offline' : 'aba oculta') 
+            : 'ok',
+          tickets: newTickets.map(t => ({
+            id: t.id,
+            description: t.description,
+            property: t.propertyCode,
+            createdAt: t.createdAt,
+          })),
+        });
+      }
+
+      if (shouldShowToastAndSound) {
+        playSuccessSound();
+      } else {
+        console.log('🔇 [Detector] Som/Toast desabilitados (offline ou aba oculta)');
+      }
+
+      // 🔔 SEMPRE notificar via callback (que adiciona ao NotificationCenter)
       onNewTickets(newTickets);
     }
 

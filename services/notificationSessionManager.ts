@@ -14,6 +14,7 @@ interface NotificationSession {
 }
 
 const STORAGE_KEY = 'casape_notification_session';
+const MAX_SEEN_IDS = 5000; // Limite para evitar explodir localStorage
 
 class NotificationSessionManager {
   private session: NotificationSession | null = null;
@@ -70,6 +71,31 @@ class NotificationSessionManager {
   }
 
   /**
+   * Retorna timestamp de início da sessão em milissegundos
+   */
+  getSessionStartedAtMs(): number {
+    return this.getSessionStartedAt().getTime();
+  }
+
+  /**
+   * Retorna último createdAt notificado de reserva em ms (ou 0 se null)
+   */
+  getLastNotifiedReservationCreatedAtMs(): number {
+    if (!this.session) this.initialize();
+    const lastCreatedAt = this.session!.lastNotifiedReservationCreatedAt;
+    return lastCreatedAt ? new Date(lastCreatedAt).getTime() : 0;
+  }
+
+  /**
+   * Retorna último createdAt notificado de ticket em ms (ou 0 se null)
+   */
+  getLastNotifiedTicketCreatedAtMs(): number {
+    if (!this.session) this.initialize();
+    const lastCreatedAt = this.session!.lastNotifiedTicketCreatedAt;
+    return lastCreatedAt ? new Date(lastCreatedAt).getTime() : 0;
+  }
+
+  /**
    * Verifica se reserva já foi vista
    */
   hasSeenReservation(id: string): boolean {
@@ -85,6 +111,13 @@ class NotificationSessionManager {
     
     if (!this.session!.seenReservationIds.includes(id)) {
       this.session!.seenReservationIds.push(id);
+      
+      // Limitar tamanho do array (manter apenas os últimos N)
+      if (this.session!.seenReservationIds.length > MAX_SEEN_IDS) {
+        this.session!.seenReservationIds = this.session!.seenReservationIds.slice(-MAX_SEEN_IDS);
+        console.log(`⚠️ [Notification Session] Limite de IDs atingido, mantendo últimos ${MAX_SEEN_IDS}`);
+      }
+      
       this.persist();
     }
   }
@@ -97,8 +130,13 @@ class NotificationSessionManager {
     
     const newIds = ids.filter(id => !this.session!.seenReservationIds.includes(id));
     if (newIds.length > 0) {
-      this.session!.seenReservationIds.push(...newIds);
-      this.persist();
+      this.session!.seenReservationIds.push(...newIds);      
+      // Limitar tamanho do array
+      if (this.session!.seenReservationIds.length > MAX_SEEN_IDS) {
+        this.session!.seenReservationIds = this.session!.seenReservationIds.slice(-MAX_SEEN_IDS);
+        console.log(`⚠️ [Notification Session] Limite de IDs atingido após baseline, mantendo últimos ${MAX_SEEN_IDS}`);
+      }
+            this.persist();
       console.log(`📝 [Notification Session] ${newIds.length} reservas marcadas como vistas (baseline)`);
     }
   }
@@ -129,6 +167,13 @@ class NotificationSessionManager {
     
     if (!this.session!.seenMaintenanceTicketIds.includes(id)) {
       this.session!.seenMaintenanceTicketIds.push(id);
+      
+      // Limitar tamanho do array
+      if (this.session!.seenMaintenanceTicketIds.length > MAX_SEEN_IDS) {
+        this.session!.seenMaintenanceTicketIds = this.session!.seenMaintenanceTicketIds.slice(-MAX_SEEN_IDS);
+        console.log(`⚠️ [Notification Session] Limite de ticket IDs atingido, mantendo últimos ${MAX_SEEN_IDS}`);
+      }
+      
       this.persist();
     }
   }
@@ -141,10 +186,25 @@ class NotificationSessionManager {
     
     const newIds = ids.filter(id => !this.session!.seenMaintenanceTicketIds.includes(id));
     if (newIds.length > 0) {
-      this.session!.seenMaintenanceTicketIds.push(...newIds);
-      this.persist();
+      this.session!.seenMaintenanceTicketIds.push(...newIds);      
+      // Limitar tamanho do array
+      if (this.session!.seenMaintenanceTicketIds.length > MAX_SEEN_IDS) {
+        this.session!.seenMaintenanceTicketIds = this.session!.seenMaintenanceTicketIds.slice(-MAX_SEEN_IDS);
+        console.log(`⚠️ [Notification Session] Limite de ticket IDs atingido após baseline, mantendo últimos ${MAX_SEEN_IDS}`);
+      }
+            this.persist();
       console.log(`📝 [Notification Session] ${newIds.length} tickets marcados como vistos (baseline)`);
     }
+  }
+
+  /**
+   * Atualiza cursor de última notificação de ticket
+   */
+  updateLastNotifiedTicket(createdAt: string): void {
+    if (!this.session) this.initialize();
+    
+    this.session!.lastNotifiedTicketCreatedAt = createdAt;
+    this.persist();
   }
 
   /**

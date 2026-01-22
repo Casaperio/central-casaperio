@@ -130,7 +130,7 @@ export function ModuleRouter({
       <AdminPanel
         users={users}
         onAddUser={(u) => {
-          storageService.users.add(u);
+          storageService.users.addOrUpdate(u);
           addLog('Criar Usuário', `Adicionou ${u.name}`);
         }}
         onDeleteUser={(id) => {

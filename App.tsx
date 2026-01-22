@@ -482,23 +482,37 @@ function AppContent() {
     currentUser,
     hasPermission: (perm: string) => canAccessModule(currentUser, perm as any),
     onNewReservations: (newReservations) => {
-      if (newReservations.length === 1) {
-        // 1 reserva: toast com detalhes completos
-        const toast = notifyReservationToast(newReservations[0]);
-        handleAddToast(toast);
+      const isOnline = navigator.onLine;
+      const isVisible = document.visibilityState === 'visible';
+      const shouldShowToast = isOnline && isVisible;
+
+      // 🔔 SEMPRE adicionar ao NotificationCenter
+      newReservations.forEach(reservation => {
+        const title = `Nova Reserva - ${reservation.propertyCode}`;
+        const message = `${reservation.guestName} • ${new Date(reservation.checkInDate).toLocaleDateString('pt-BR')} → ${new Date(reservation.checkOutDate).toLocaleDateString('pt-BR')}`;
+        addNotification(title, message, 'info');
+      });
+
+      // 🎨 TOAST: apenas se online + visível
+      if (shouldShowToast) {
+        if (newReservations.length === 1) {
+          const toast = notifyReservationToast(newReservations[0]);
+          handleAddToast(toast);
+        } else {
+          const toast = notifyReservationsToastMany(newReservations);
+          handleAddToast(toast);
+        }
+
+        // Confetti
+        setNewReservations(newReservations);
+        setShowConfetti(true);
+        setTimeout(() => {
+          setShowConfetti(false);
+          setNewReservations([]);
+        }, 5000);
       } else {
-        // Múltiplas: toast resumido
-        const toast = notifyReservationsToastMany(newReservations);
-        handleAddToast(toast);
+        console.log(`📢 [App] ${newReservations.length} novas reservas registradas no NotificationCenter (toast desabilitado: ${!isOnline ? 'offline' : 'aba oculta'})`);
       }
-      
-      // Opcional: manter confetti
-      setNewReservations(newReservations);
-      setShowConfetti(true);
-      setTimeout(() => {
-        setShowConfetti(false);
-        setNewReservations([]);
-      }, 5000);
     },
   });
 
@@ -508,14 +522,28 @@ function AppContent() {
     currentUser,
     hasPermission: (perm: string) => canAccessModule(currentUser, perm as any),
     onNewTickets: (newTickets) => {
-      if (newTickets.length === 1) {
-        // 1 ticket: toast com detalhes
-        const toast = notifyMaintenanceTicketToast(newTickets[0]);
-        handleAddToast(toast);
+      const isOnline = navigator.onLine;
+      const isVisible = document.visibilityState === 'visible';
+      const shouldShowToast = isOnline && isVisible;
+
+      // 🔔 SEMPRE adicionar ao NotificationCenter
+      newTickets.forEach(ticket => {
+        const title = `Novo Chamado - ${ticket.propertyCode}`;
+        const message = `${ticket.description?.substring(0, 80)}${ticket.description && ticket.description.length > 80 ? '...' : ''}`;
+        addNotification(title, message, 'warning');
+      });
+
+      // 🎨 TOAST: apenas se online + visível
+      if (shouldShowToast) {
+        if (newTickets.length === 1) {
+          const toast = notifyMaintenanceTicketToast(newTickets[0]);
+          handleAddToast(toast);
+        } else {
+          const toast = notifyMaintenanceTicketsToastMany(newTickets);
+          handleAddToast(toast);
+        }
       } else {
-        // Múltiplos: toast resumido
-        const toast = notifyMaintenanceTicketsToastMany(newTickets);
-        handleAddToast(toast);
+        console.log(`📢 [App] ${newTickets.length} novos tickets registrados no NotificationCenter (toast desabilitado: ${!isOnline ? 'offline' : 'aba oculta'})`);
       }
     },
   });
