@@ -1,11 +1,12 @@
 import React from 'react';
 import { AlertCircle, CalendarClock, LogOut as LogOutIcon, ChevronDown, MessageSquare, User } from 'lucide-react';
-import { Ticket, TicketStatus, AppModule, Reservation } from '../../types';
+import { Ticket, TicketStatus, AppModule, Reservation, UserWithPassword } from '../../types';
 import { MaintenanceGroup, MaintenanceItem, PeriodPreset } from '../../hooks/features/useMaintenanceFilters';
 import { useMaintenanceCalendar } from '../../hooks/features/useMaintenanceCalendar';
 import { SkeletonCard, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import { TypeFilter } from './TypeFilter';
+import { AssigneeFilter } from './AssigneeFilter';
 import PeriodFilter from './PeriodFilter';
 import { parseLocalDate, formatDatePtBR, isToday, isTomorrow } from '../../utils';
 import { useQueryClient } from '@tanstack/react-query';
@@ -21,7 +22,8 @@ interface MaintenanceViewProps {
   setSelectedTicket: (ticket: Ticket | null) => void;
   searchTerm: string;
   filterStatus: string;
-  filterMaintenanceAssignee: string;
+  filterMaintenanceAssignee: string[];
+  setFilterMaintenanceAssignee: (assignees: string[]) => void;
   filterMaintenanceProperty: string;
   filterMaintenanceType: string[];
   setFilterMaintenanceType: (types: string[]) => void;
@@ -38,6 +40,8 @@ interface MaintenanceViewProps {
   displayCount: number;
   staysReservations?: Reservation[];
   maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>;
+  allUsers: UserWithPassword[];
+  isLoading?: boolean;
 }
 
 export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
@@ -51,6 +55,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   searchTerm,
   filterStatus,
   filterMaintenanceAssignee,
+  setFilterMaintenanceAssignee,
   filterMaintenanceProperty,
   filterMaintenanceType,
   setFilterMaintenanceType,
@@ -66,7 +71,9 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   totalItems,
   displayCount,
   staysReservations = [],
-  maintenanceOverrides = {}
+  maintenanceOverrides = {},
+  allUsers,
+  isLoading = false
 }) => {
   const queryClient = useQueryClient();
 
@@ -175,7 +182,38 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
         </div>
       )}
 
-      {tickets.length === 0 && !searchTerm ? (
+      {/* Filtro por Responsável Técnico - Somente para Manutenção */}
+      {activeModule === 'maintenance' && (
+        <div className="mb-4">
+          <AssigneeFilter
+            selectedAssignees={filterMaintenanceAssignee}
+            setSelectedAssignees={setFilterMaintenanceAssignee}
+            allUsers={allUsers}
+          />
+        </div>
+      )}
+
+      {/* Skeleton Loader durante carregamento inicial */}
+      {isLoading ? (
+        viewMode === 'cards' ? (
+          <div className="space-y-8">
+            <div>
+              <div className="h-4 bg-gray-200 rounded w-48 mb-3 animate-pulse"></div>
+              <div className={`grid gap-4 ${getGridClass()}`}>
+                <SkeletonCard count={6} />
+              </div>
+            </div>
+            <div>
+              <div className="h-4 bg-gray-200 rounded w-48 mb-3 animate-pulse"></div>
+              <div className={`grid gap-4 ${getGridClass()}`}>
+                <SkeletonCard count={6} />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <SkeletonList count={12} />
+        )
+      ) : tickets.length === 0 && !searchTerm ? (
         viewMode === 'cards' ? (
           <div className="space-y-8">
             <div>

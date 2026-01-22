@@ -305,7 +305,7 @@ function AppContent() {
   const [filterResponsible, setFilterResponsible] = useState<string>('all');
   
   // Maintenance Specific Filters
-  const [filterMaintenanceAssignee, setFilterMaintenanceAssignee] = useState<string>('all');
+  const [filterMaintenanceAssignee, setFilterMaintenanceAssignee] = useState<string[]>([]);
   const [filterMaintenanceProperty, setFilterMaintenanceProperty] = useState<string>('all');
   const [filterMaintenanceType, setFilterMaintenanceType] = useState<string[]>([]);
 
@@ -659,7 +659,7 @@ function AppContent() {
   });
 
   // Maintenance Pagination Hook
-  const resetTrigger = `${searchTerm}-${filterStatus}-${filterMaintenanceAssignee}-${filterMaintenanceProperty}-${filterMaintenanceType}-${periodPreset}-${customStartDate}-${customEndDate}`;
+  const resetTrigger = `${searchTerm}-${filterStatus}-${filterMaintenanceAssignee.join(',')}-${filterMaintenanceProperty}-${filterMaintenanceType}-${periodPreset}-${customStartDate}-${customEndDate}`;
   const {
     paginatedGroups,
     hasMore: hasMoreMaintenanceItems,
@@ -899,6 +899,7 @@ function AppContent() {
                 searchTerm={searchTerm}
                 filterStatus={filterStatus}
                 filterMaintenanceAssignee={filterMaintenanceAssignee}
+                setFilterMaintenanceAssignee={setFilterMaintenanceAssignee}
                 filterMaintenanceProperty={filterMaintenanceProperty}
                 filterMaintenanceType={filterMaintenanceType}
                 setFilterMaintenanceType={setFilterMaintenanceType}
@@ -915,6 +916,8 @@ function AppContent() {
                 displayCount={maintenanceDisplayCount}
                 staysReservations={staysReservations}
                 maintenanceOverrides={maintenanceOverrides}
+                allUsers={users}
+                isLoading={staysLoading}
               />
            )}
 

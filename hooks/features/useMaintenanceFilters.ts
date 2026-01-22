@@ -87,7 +87,7 @@ interface UseMaintenanceFiltersProps {
   staysReservations: Reservation[];
   searchTerm: string;
   filterStatus: string;
-  filterMaintenanceAssignee: string;
+  filterMaintenanceAssignee: string | string[]; // Agora aceita string ou array
   filterMaintenanceProperty: string;
   filterMaintenanceType: string[];
   activeModule: string | null;
@@ -194,7 +194,28 @@ export function useMaintenanceFilters({
         t.assignee?.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesStatus = filterStatus === 'all' || t.status === filterStatus;
-      const matchesAssignee = filterMaintenanceAssignee === 'all' || t.assignee === filterMaintenanceAssignee;
+      
+      // Filtro por responsável - suporta string ou array
+      let matchesAssignee = true;
+      if (Array.isArray(filterMaintenanceAssignee)) {
+        // Multi-select: filtra se o assignee está na lista OU se lista está vazia
+        matchesAssignee = filterMaintenanceAssignee.length === 0 || 
+                          (t.assignee ? filterMaintenanceAssignee.includes(t.assignee) : false);
+        
+        // Debug log
+        if (filterMaintenanceAssignee.length > 0) {
+          console.log('🔍 Filtro Assignee:', {
+            ticketId: t.id,
+            ticketAssignee: t.assignee,
+            filterList: filterMaintenanceAssignee,
+            matches: matchesAssignee
+          });
+        }
+      } else {
+        // Backward compatibility: string simples
+        matchesAssignee = filterMaintenanceAssignee === 'all' || t.assignee === filterMaintenanceAssignee;
+      }
+      
       const matchesProperty = filterMaintenanceProperty === 'all' || t.propertyCode === filterMaintenanceProperty;
 
       // Filtro por tipo (multi-seleção)
@@ -334,7 +355,16 @@ export function useMaintenanceFilters({
 
           const matchesProperty = filterMaintenanceProperty === 'all' || r.propertyCode === filterMaintenanceProperty;
 
-          if (matchesSearch && matchesProperty) {
+          // Filtro por responsável: checkouts virtuais NÃO têm assignee
+          // Se filtro de assignee está ativo (array não vazio), excluir checkouts virtuais
+          let matchesAssignee = true;
+          if (Array.isArray(filterMaintenanceAssignee) && filterMaintenanceAssignee.length > 0) {
+            matchesAssignee = false; // Checkouts virtuais não têm assignee, então não passam no filtro
+          } else if (typeof filterMaintenanceAssignee === 'string' && filterMaintenanceAssignee !== 'all') {
+            matchesAssignee = false; // Backward compatibility
+          }
+
+          if (matchesSearch && matchesProperty && matchesAssignee) {
             const dateKey = r.checkOutDate.split('T')[0];
             if (!scheduledMap[dateKey]) scheduledMap[dateKey] = [];
             scheduledMap[dateKey].push(checkoutItem);

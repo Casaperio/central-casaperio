@@ -75,7 +75,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
      </button>
 
      {showSearch && (
-      <div className="relative hidden w-full max-w-xs md:max-w-md sm:block">
+      <div className="relative w-full max-w-xs md:max-w-md">
        <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
        <input
         type="text"
