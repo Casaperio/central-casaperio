@@ -134,12 +134,16 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  }, [getEditableFields]);
 
  // Linked Tickets Logic
+ // Task 79: Excluir chamados de checkout automático do histórico
  const linkedTickets = tickets.filter(t =>
-   t.reservationId === reservation.id ||
+   // Filtro primário: reservationId match OU tickets durante período da reserva
+   (t.reservationId === reservation.id ||
    // Fallback: Tickets created during reservation for same property
    (t.propertyCode === reservation.propertyCode &&
     t.createdAt >= new Date(reservation.checkInDate).getTime() &&
-    t.createdAt <= new Date(reservation.checkOutDate).getTime())
+    t.createdAt <= new Date(reservation.checkOutDate).getTime())) &&
+   // Task 79: CRÍTICO - Excluir chamados de checkout automático
+   !t.isCheckoutTicket
  ).sort((a,b) => b.createdAt - a.createdAt);
 
  // Carrega a nota do hóspede do Firestore
@@ -977,6 +981,38 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
      ) : (
        // HISTORY TAB
        <div className="space-y-6">
+         {/* Tickets Section */}
+         {linkedTickets.length > 0 && (
+           <div className="space-y-3">
+             <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+               <Wrench size={12} /> Chamados de Manutenção
+             </h4>
+             {linkedTickets.map(t => (
+               <div key={t.id} className="flex gap-3 text-sm border-b border-gray-100 pb-3 last:border-0">
+                 <div className="mt-1">
+                   <div className={`w-2 h-2 rounded-full ${
+                     t.status === 'Concluído' ? 'bg-green-500' : 
+                     t.status === 'Em Andamento' ? 'bg-yellow-500' : 'bg-red-500'
+                   }`}></div>
+                 </div>
+                 <div className="flex-1">
+                   <p className="text-gray-900 font-medium">{t.serviceType}: {t.description}</p>
+                   <div className="flex items-center gap-2 mt-1">
+                     <p className="text-xs text-gray-500">
+                       {formatDatePtBR(t.createdAt)} • {t.assignee || 'Sem técnico'}
+                     </p>
+                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                       ${t.status === 'Concluído' ? 'bg-green-100 text-green-700' : 
+                        t.status === 'Em Andamento' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                       {t.status}
+                     </span>
+                   </div>
+                 </div>
+               </div>
+             ))}
+           </div>
+         )}
+         
          {/* Log Section */}
          <div className="space-y-3">
            <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">

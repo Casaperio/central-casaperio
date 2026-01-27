@@ -359,7 +359,9 @@ export const GuestView: React.FC<GuestViewProps> = ({
                             </span>
                           )}
                           {(() => {
+                            // Task 79: Excluir chamados de checkout automático
                             const relatedTickets = tickets.filter(t =>
+                              !t.isCheckoutTicket &&
                               t.propertyCode === reservation.propertyCode &&
                               ((t.scheduledDate && new Date(t.scheduledDate) >= new Date(reservation.checkInDate) && new Date(t.scheduledDate) <= new Date(reservation.checkOutDate)) ||
                                (t.desiredDate && new Date(t.desiredDate) >= new Date(reservation.checkInDate) && new Date(t.desiredDate) <= new Date(reservation.checkOutDate)))
@@ -523,7 +525,9 @@ export const GuestView: React.FC<GuestViewProps> = ({
                           </span>
                         )}
                         {(() => {
+                          // Task 79: Excluir chamados de checkout automático
                           const relatedTickets = tickets.filter(t =>
+                            !t.isCheckoutTicket &&
                             t.propertyCode === reservation.propertyCode &&
                             ((t.scheduledDate && new Date(t.scheduledDate) >= new Date(reservation.checkInDate) && new Date(t.scheduledDate) <= new Date(reservation.checkOutDate)) ||
                              (t.desiredDate && new Date(t.desiredDate) >= new Date(reservation.checkInDate) && new Date(t.desiredDate) <= new Date(reservation.checkOutDate)))

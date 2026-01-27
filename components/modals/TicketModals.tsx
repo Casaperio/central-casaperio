@@ -77,7 +77,8 @@ const TicketModals: React.FC<TicketModalsProps> = ({
   addLog(typeLabel, `Criou ${typeLabel.toLowerCase()} para ${t.propertyCode}`);
   addNotification('Novo Chamado', `${typeLabel} criado para ${t.propertyCode}`, 'info');
 
-  if (t.reservationId) {
+  // Task 79: Sincronizar com histórico da reserva APENAS se NÃO for checkout automático
+  if (t.reservationId && !t.isCheckoutTicket) {
    const res = reservations.find((r) => r.id === t.reservationId);
    if (res) {
     const newHistory = [
