@@ -90,6 +90,7 @@ interface UseMaintenanceFiltersProps {
   filterMaintenanceAssignee: string | string[]; // Agora aceita string ou array
   filterMaintenanceProperty: string;
   filterMaintenanceType: string[];
+  maintenanceStatusFilter?: 'all' | 'in_progress'; // NOVO: Filtro de status
   activeModule: string | null;
   periodPreset?: PeriodPreset;
   customStartDate?: string;
@@ -105,6 +106,7 @@ export function useMaintenanceFilters({
   filterMaintenanceAssignee,
   filterMaintenanceProperty,
   filterMaintenanceType,
+  maintenanceStatusFilter = 'all',
   activeModule,
   periodPreset = 'all',
   customStartDate = '',
@@ -115,6 +117,9 @@ export function useMaintenanceFilters({
   // Calcular intervalo de datas baseado no preset
   // Usa intervalo half-open: [startInclusive, endExclusive)
   const { periodStartDate, periodEndDate, shouldFilterByPeriod } = useMemo(() => {
+    // Log do filtro de status recebido
+    console.log('🎯 MaintenanceFilters - Filtro Status:', maintenanceStatusFilter);
+    
     // Se for 'all', não filtrar por período
     if (periodPreset === 'all') {
       return {
@@ -237,6 +242,23 @@ export function useMaintenanceFilters({
         });
       }
 
+      // Filtro por status "Em andamento" (não concluídos)
+      const matchesStatusFilter = maintenanceStatusFilter === 'all' || 
+                                   (maintenanceStatusFilter === 'in_progress' && t.status !== TicketStatus.DONE);
+      
+      // Debug log detalhado para o filtro de status
+      if (maintenanceStatusFilter === 'in_progress') {
+        console.log('🔍 Status Filter DEBUG:', {
+          ticketId: t.id,
+          propertyCode: t.propertyCode,
+          status: t.status,
+          statusEnum: TicketStatus.DONE,
+          isDone: t.status === TicketStatus.DONE,
+          matchesStatusFilter,
+          filterMode: maintenanceStatusFilter
+        });
+      }
+
       // Filtrar por período de data (apenas se shouldFilterByPeriod = true)
       if (shouldFilterByPeriod && periodStartDate && periodEndDate) {
         // Tickets sem scheduledDate e não-concluídos vão para "Aguardando Agendamento"
@@ -256,7 +278,7 @@ export function useMaintenanceFilters({
         // Sem data agendada: sempre passa (vai para "Aguardando Agendamento")
       }
 
-      return matchesSearch && matchesStatus && matchesAssignee && matchesProperty && matchesType;
+      return matchesSearch && matchesStatus && matchesAssignee && matchesProperty && matchesType && matchesStatusFilter;
     });
 
     return list.sort((a, b) => {
@@ -278,7 +300,7 @@ export function useMaintenanceFilters({
       }
       return 0;
     });
-  }, [tickets, searchTerm, filterStatus, filterMaintenanceAssignee, filterMaintenanceProperty, filterMaintenanceType, activeModule, periodStartDate, periodEndDate, shouldFilterByPeriod, maintenanceOverrides]);
+  }, [tickets, searchTerm, filterStatus, filterMaintenanceAssignee, filterMaintenanceProperty, filterMaintenanceType, activeModule, periodStartDate, periodEndDate, shouldFilterByPeriod, maintenanceOverrides, maintenanceStatusFilter]);
 
   const maintenanceGroups = useMemo(() => {
     if (activeModule !== 'maintenance' && activeModule !== 'concierge') return [];
@@ -411,7 +433,7 @@ export function useMaintenanceFilters({
       periodPreset,
       shouldFilterByPeriod,
     });
-  }, [filteredTickets, staysReservations, activeModule, filterMaintenanceType, searchTerm, filterMaintenanceProperty, periodStartDate, periodEndDate, shouldFilterByPeriod, periodPreset, maintenanceOverrides]);
+  }, [filteredTickets, staysReservations, activeModule, filterMaintenanceType, searchTerm, filterMaintenanceProperty, periodStartDate, periodEndDate, shouldFilterByPeriod, periodPreset, maintenanceOverrides, maintenanceStatusFilter]);
 
   const upcomingCheckouts = useMemo(() => {
     if (activeModule !== 'maintenance') return [];

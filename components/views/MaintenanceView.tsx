@@ -7,6 +7,7 @@ import { SkeletonCard, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import { TypeFilter } from './TypeFilter';
 import { AssigneeFilter } from './AssigneeFilter';
+import { MaintenanceStatusFilter } from './MaintenanceStatusFilter';
 import PeriodFilter from './PeriodFilter';
 import { parseLocalDate, formatDatePtBR, isToday, isTomorrow } from '../../utils';
 import { useQueryClient } from '@tanstack/react-query';
@@ -27,6 +28,8 @@ interface MaintenanceViewProps {
   filterMaintenanceProperty: string;
   filterMaintenanceType: string[];
   setFilterMaintenanceType: (types: string[]) => void;
+  maintenanceStatusFilter: 'all' | 'in_progress';
+  setMaintenanceStatusFilter: (status: 'all' | 'in_progress') => void;
   activeModule: AppModule;
   gridColumns: number;
   periodPreset: PeriodPreset;
@@ -44,6 +47,25 @@ interface MaintenanceViewProps {
   isLoading?: boolean;
 }
 
+// Função para detectar chamados atrasados
+const isTicketOverdue = (ticket: Ticket): boolean => {
+  // Tickets concluídos nunca estão atrasados
+  if (ticket.status === TicketStatus.DONE) return false;
+  
+  // Pegar a data limite (prioridade: scheduledDate > desiredDate)
+  const deadline = ticket.scheduledDate || ticket.desiredDate;
+  if (!deadline) return false;
+  
+  // Comparar com data atual (sem hora)
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  
+  const deadlineDate = new Date(deadline);
+  deadlineDate.setHours(0, 0, 0, 0);
+  
+  return deadlineDate < now;
+};
+
 export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   tickets,
   filteredTickets,
@@ -59,6 +81,8 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   filterMaintenanceProperty,
   filterMaintenanceType,
   setFilterMaintenanceType,
+  maintenanceStatusFilter,
+  setMaintenanceStatusFilter,
   activeModule,
   gridColumns,
   periodPreset,
@@ -172,24 +196,28 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
         </div>
       )}
 
-      {/* Filtro de Tipo - Somente para Manutenção */}
+      {/* Filtros em Linha - Somente para Manutenção */}
       {activeModule === 'maintenance' && (
-        <div className="mb-4">
-          <TypeFilter
-            filterMaintenanceType={filterMaintenanceType}
-            setFilterMaintenanceType={setFilterMaintenanceType}
-          />
-        </div>
-      )}
-
-      {/* Filtro por Responsável Técnico - Somente para Manutenção */}
-      {activeModule === 'maintenance' && (
-        <div className="mb-4">
-          <AssigneeFilter
-            selectedAssignees={filterMaintenanceAssignee}
-            setSelectedAssignees={setFilterMaintenanceAssignee}
-            allUsers={allUsers}
-          />
+        <div className="mb-4 flex flex-wrap gap-3">
+          <div className="flex-1 min-w-[200px] max-w-[280px]">
+            <TypeFilter
+              filterMaintenanceType={filterMaintenanceType}
+              setFilterMaintenanceType={setFilterMaintenanceType}
+            />
+          </div>
+          <div className="flex-1 min-w-[200px] max-w-[280px]">
+            <AssigneeFilter
+              selectedAssignees={filterMaintenanceAssignee}
+              setSelectedAssignees={setFilterMaintenanceAssignee}
+              allUsers={allUsers}
+            />
+          </div>
+          <div className="flex-1 min-w-[180px] max-w-[220px]">
+            <MaintenanceStatusFilter
+              selectedStatus={maintenanceStatusFilter}
+              setSelectedStatus={setMaintenanceStatusFilter}
+            />
+          </div>
         </div>
       )}
 
@@ -285,6 +313,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
 
                     // É um ticket
                     const ticket = item as Ticket;
+                    const isOverdue = isTicketOverdue(ticket);
                     const isExpired = ticket.status !== TicketStatus.DONE && new Date(ticket.scheduledDate || ticket.desiredDate) < new Date();
 
                     return (
@@ -295,6 +324,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                           handleTicketClick(ticket);
                         }}
                         className={`p-4 rounded-lg border shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden flex flex-col min-w-0 ${
+                          isOverdue ? 'ring-4 ring-red-600 bg-red-50 border-red-400' :
                           isExpired ? 'ring-2 ring-red-500 bg-red-50' :
                           ticket.isCheckoutTicket ? 'ring-2 ring-violet-500 bg-violet-50' :
                           ticket.isGuestRequest ? 'ring-2 ring-yellow-500 bg-yellow-50' :
@@ -303,6 +333,14 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                           'border-gray-200 bg-white'
                         }`}
                       >
+                        {/* TAG ATRASADO - Prioridade máxima */}
+                        {isOverdue && (
+                          <span className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider shadow-lg animate-pulse flex items-center gap-1 z-10">
+                            ⚠️ ATRASADO
+                          </span>
+                        )}
+                        
+                        {/* Tags de tipo (movidas para não sobrepor ATRASADO) */}
                         {ticket.isCheckoutTicket && <div className="absolute top-0 right-0 bg-violet-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider flex items-center gap-1 shadow-sm"><LogOutIcon size={10} /> CHECKOUT</div>}
                         {ticket.isGuestRequest && !ticket.isCheckoutTicket && <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider">Hóspede</div>}
                         {ticket.isPreventive && !ticket.isCheckoutTicket && <div className="absolute top-0 right-0 bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider flex items-center gap-1">PREVENTIVA</div>}

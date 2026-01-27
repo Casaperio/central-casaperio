@@ -308,6 +308,7 @@ function AppContent() {
   const [filterMaintenanceAssignee, setFilterMaintenanceAssignee] = useState<string[]>([]);
   const [filterMaintenanceProperty, setFilterMaintenanceProperty] = useState<string>('all');
   const [filterMaintenanceType, setFilterMaintenanceType] = useState<string[]>([]);
+  const [maintenanceStatusFilter, setMaintenanceStatusFilter] = useState<'all' | 'in_progress'>('all');
 
   // Maintenance Period Filter (default: 'all' - sem filtro)
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('all');
@@ -651,6 +652,7 @@ function AppContent() {
     filterMaintenanceAssignee,
     filterMaintenanceProperty,
     filterMaintenanceType,
+    maintenanceStatusFilter,
     activeModule,
     periodPreset,
     customStartDate,
@@ -659,7 +661,7 @@ function AppContent() {
   });
 
   // Maintenance Pagination Hook
-  const resetTrigger = `${searchTerm}-${filterStatus}-${filterMaintenanceAssignee.join(',')}-${filterMaintenanceProperty}-${filterMaintenanceType}-${periodPreset}-${customStartDate}-${customEndDate}`;
+  const resetTrigger = `${searchTerm}-${filterStatus}-${filterMaintenanceAssignee.join(',')}-${filterMaintenanceProperty}-${filterMaintenanceType}-${maintenanceStatusFilter}-${periodPreset}-${customStartDate}-${customEndDate}`;
   const {
     paginatedGroups,
     hasMore: hasMoreMaintenanceItems,
@@ -903,6 +905,8 @@ function AppContent() {
                 filterMaintenanceProperty={filterMaintenanceProperty}
                 filterMaintenanceType={filterMaintenanceType}
                 setFilterMaintenanceType={setFilterMaintenanceType}
+                maintenanceStatusFilter={maintenanceStatusFilter}
+                setMaintenanceStatusFilter={setMaintenanceStatusFilter}
                 activeModule={activeModule}
                 gridColumns={gridColumns}
                 periodPreset={periodPreset}
