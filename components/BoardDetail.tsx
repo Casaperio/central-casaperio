@@ -6,7 +6,6 @@ import {
  X, Check, AlertTriangle, AlertCircle, Filter, CalendarDays, AtSign,
  Paperclip, Upload, FileText, Image, Video, Table, File, Loader2, Download, ExternalLink
 } from 'lucide-react';
-import { storageService } from '../services/storage';
 
 interface BoardDetailProps {
  board: Board;
@@ -54,6 +53,7 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
  const [attachments, setAttachments] = useState<BoardCardAttachment[]>([]);
  const [isUploading, setIsUploading] = useState(false);
  const [uploadError, setUploadError] = useState<string | null>(null);
+ const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
  const fileInputRef = useRef<HTMLInputElement>(null);
 
  // DnD State
@@ -124,7 +124,10 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
    setCardAssignee(card.assigneeId || '');
    setCardDate(card.dueDate || '');
    setChecklist(card.checklist || []);
-   setAttachments(card.attachments || []);
+   // ✅ SEMPRE garantir array, nunca undefined
+   const cardAttachments = Array.isArray(card.attachments) ? card.attachments : [];
+   setAttachments(cardAttachments);
+   console.log(`📎 [Modal] Abrindo cartão "${card.title}" com ${cardAttachments.length} anexos`, cardAttachments);
   } else {
    setEditingCard(null);
    setActiveColumnId(columnId || boardColumns[0]?.id || '');
@@ -134,9 +137,9 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
    setCardDate('');
    setChecklist([]);
    setAttachments([]);
+   console.log('📎 [Modal] Novo cartão - anexos vazios');
   }
-  setUploadError(null);
-  setShowCardModal(true);
+  setUploadError(null);   setUploadSuccess(null);  setShowCardModal(true);
  };
 
  const handleSaveCard = (e: React.FormEvent) => {
@@ -155,6 +158,15 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
     });
   }
 
+  // ✅ GARANTIR que attachments seja sempre array, nunca undefined
+  const finalAttachments = Array.isArray(attachments) ? attachments : [];
+  
+  console.group('💾 [Save] Salvando cartão');
+  console.log('Título:', cardTitle);
+  console.log('Anexos:', finalAttachments.length, finalAttachments);
+  console.log('Checklist:', checklist.length);
+  console.groupEnd();
+
   const cardData = {
    boardId: board.id,
    columnId: activeColumnId,
@@ -163,7 +175,7 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
    assigneeId: cardAssignee,
    dueDate: cardDate,
    checklist: checklist,
-   attachments: attachments,
+   attachments: finalAttachments, // ✅ SEMPRE array
    order: editingCard ? editingCard.order : Date.now(),
    createdAt: editingCard ? editingCard.createdAt : Date.now()
   };
@@ -250,37 +262,91 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
  };
 
  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   console.log('🎯 [Input] handleFileSelect disparado!', e);
+   
    const files = e.target.files;
-   if (!files || files.length === 0 || !currentUser) return;
+   console.log('📁 Files do input:', files);
+   
+   if (!files || files.length === 0) {
+     console.warn('⚠️ Nenhum arquivo selecionado');
+     return;
+   }
 
    setUploadError(null);
+   setUploadSuccess(null);
    setIsUploading(true);
 
+   console.group('📤 [Upload] Iniciando upload de arquivos');
+   console.log('Arquivos selecionados:', files.length);
+
    try {
+     let successCount = 0;
+     
      for (const file of Array.from(files)) {
-       // Validate file
-       const validation = storageService.fileStorage.validateFile(file);
-       if (!validation.valid) {
-         setUploadError(validation.error || 'Arquivo inválido');
+       console.log(`Processando: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, ${file.type})`);
+       
+       // Validate file size (max 5MB)
+       if (file.size > 5 * 1024 * 1024) {
+         const errorMsg = `Arquivo muito grande: ${file.name}. Máximo: 5MB`;
+         console.error(`❌ ${errorMsg}`);
+         setUploadError(errorMsg);
          continue;
        }
 
-       // Upload file
-       const attachment = await storageService.fileStorage.upload(
-         file,
-         board.id,
-         editingCard?.id || 'new',
-         currentUser.id
-       );
+       // Validate file type
+       const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/jpg'];
+       if (!allowedTypes.includes(file.type)) {
+         const errorMsg = `Tipo não permitido: ${file.type}. Use JPG, PNG, GIF ou WEBP`;
+         console.error(`❌ ${errorMsg}`);
+         setUploadError(errorMsg);
+         continue;
+       }
 
-       setAttachments(prev => [...prev, attachment]);
+       // Convert to base64
+       const reader = new FileReader();
+       const base64Promise = new Promise<string>((resolve, reject) => {
+         reader.onloadend = () => resolve(reader.result as string);
+         reader.onerror = reject;
+         reader.readAsDataURL(file);
+       });
+
+       console.log(`🔄 Convertendo para base64...`);
+       const base64 = await base64Promise;
+
+       // Create attachment object
+       const attachment: BoardCardAttachment = {
+         id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+         name: file.name,
+         type: 'image',
+         mimeType: file.type,
+         size: file.size,
+         url: base64, // ✅ BASE64 em vez de Firebase Storage URL
+         uploadedAt: Date.now(),
+         uploadedBy: currentUser?.id || 'unknown'
+       };
+
+       console.log(`✅ Conversão concluída:`, { id: attachment.id, name: attachment.name, size: file.size });
+       
+       setAttachments(prev => {
+         const updated = [...prev, attachment];
+         console.log(`📎 Total de anexos agora: ${updated.length}`);
+         return updated;
+       });
+       
+       successCount++;
+     }
+     
+     if (successCount > 0) {
+       console.log(`🎉 ${successCount} arquivo(s) anexado(s) com sucesso!`);
+       setUploadSuccess(`✅ ${successCount} arquivo(s) anexado(s) com sucesso!`);
+       setTimeout(() => setUploadSuccess(null), 3000);
      }
    } catch (error) {
-     console.error('Upload error:', error);
-     setUploadError('Erro ao fazer upload do arquivo');
+     console.error('❌ Erro no upload:', error);
+     setUploadError(error instanceof Error ? error.message : 'Erro ao processar arquivo');
    } finally {
+     console.groupEnd();
      setIsUploading(false);
-     // Reset file input
      if (fileInputRef.current) {
        fileInputRef.current.value = '';
      }
@@ -290,13 +356,14 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
  const handleDeleteAttachment = async (attachment: BoardCardAttachment) => {
    if (!window.confirm(`Excluir arquivo "${attachment.name}"?`)) return;
 
-   try {
-     await storageService.fileStorage.delete(attachment.url);
-     setAttachments(prev => prev.filter(a => a.id !== attachment.id));
-   } catch (error) {
-     console.error('Delete error:', error);
-     setUploadError('Erro ao excluir arquivo');
-   }
+   console.log(`🗑️ [Delete] Excluindo anexo: ${attachment.name}`);
+   
+   // Remover do estado local (não precisa deletar do Firebase Storage pois é base64)
+   setAttachments(prev => {
+     const updated = prev.filter(a => a.id !== attachment.id);
+     console.log(`📎 Anexos restantes: ${updated.length}`);
+     return updated;
+   });
  };
 
  const handleDeleteBoard = () => {
@@ -744,59 +811,86 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
 
           {/* Existing Attachments */}
           {attachments.length > 0 && (
-            <div className="space-y-2 mb-3">
+            <div className="space-y-3 mb-3">
               {attachments.map(attachment => (
                 <div
                   key={attachment.id}
-                  className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-100 group hover:bg-gray-100 transition-colors"
+                  className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden group hover:border-gray-300 transition-all"
                 >
-                  {/* Preview/Icon */}
-                  <div className="flex-shrink-0">
-                    {attachment.type === 'image' && attachment.thumbnailUrl ? (
+                  {/* Image Preview - Large and Clickable */}
+                  {attachment.type === 'image' && (
+                    <div 
+                      className="relative w-full aspect-video bg-gray-100 cursor-pointer hover:bg-gray-200 transition-colors"
+                      onClick={() => {
+                        // Abrir imagem em nova aba
+                        const newWindow = window.open();
+                        if (newWindow) {
+                          newWindow.document.write(`
+                            <html>
+                              <head>
+                                <title>${attachment.name}</title>
+                                <style>
+                                  body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #000; }
+                                  img { max-width: 100%; max-height: 100vh; object-fit: contain; }
+                                </style>
+                              </head>
+                              <body>
+                                <img src="${attachment.url}" alt="${attachment.name}" />
+                              </body>
+                            </html>
+                          `);
+                          newWindow.document.close();
+                        }
+                      }}
+                      title="Clique para abrir em tela cheia"
+                    >
                       <img
-                        src={attachment.thumbnailUrl || attachment.url}
+                        src={attachment.url}
                         alt={attachment.name}
-                        className="w-10 h-10 object-cover rounded"
+                        className="w-full h-full object-contain"
                       />
-                    ) : (
-                      <div className="w-10 h-10 bg-white rounded flex items-center justify-center border border-gray-200">
-                        {getAttachmentIcon(attachment.type)}
+                      {/* Hover overlay */}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 px-3 py-1.5 rounded-full text-xs font-medium text-gray-700 flex items-center gap-1.5">
+                          <ExternalLink size={12} />
+                          Abrir em nova aba
+                        </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
-                  {/* File Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{attachment.name}</p>
-                    <p className="text-xs text-gray-500">{formatFileSize(attachment.size)}</p>
-                  </div>
+                  {/* File Info and Actions */}
+                  <div className="p-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{attachment.name}</p>
+                      <p className="text-xs text-gray-500">{formatFileSize(attachment.size)}</p>
+                    </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <a
-                      href={attachment.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                      title="Abrir em nova aba"
-                    >
-                      <ExternalLink size={14} />
-                    </a>
-                    <a
-                      href={attachment.url}
-                      download={attachment.name}
-                      className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded"
-                      title="Baixar"
-                    >
-                      <Download size={14} />
-                    </a>
-                    <button
-                      onClick={() => handleDeleteAttachment(attachment)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                      title="Excluir"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {/* Actions */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          // Download base64 as file
+                          const link = document.createElement('a');
+                          link.href = attachment.url;
+                          link.download = attachment.name;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded"
+                        title="Baixar"
+                      >
+                        <Download size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAttachment(attachment)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                        title="Excluir"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -811,18 +905,40 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
             </div>
           )}
 
+          {/* Upload Success */}
+          {uploadSuccess && (
+            <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2 mb-3 flex items-center gap-2">
+              <CheckCircle2 size={14} />
+              {uploadSuccess}
+            </div>
+          )}
+
           {/* Upload Button */}
           <input
             ref={fileInputRef}
             type="file"
             multiple
-            onChange={handleFileSelect}
+            onChange={(e) => {
+              console.log('🎯 [Input] onChange disparado!', e.target.files);
+              handleFileSelect(e);
+            }}
             className="hidden"
-            accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
+            accept="image/*"
+            id="file-upload-input"
           />
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => {
+              console.log('🖱️ Botão "Adicionar Arquivo" clicado');
+              console.log('📎 fileInputRef.current:', fileInputRef.current);
+              const input = fileInputRef.current;
+              if (input) {
+                console.log('✅ Input existe, disparando click...');
+                input.click();
+              } else {
+                console.error('❌ Input não existe!');
+              }
+            }}
             disabled={isUploading}
             className="w-full py-2.5 text-sm border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
