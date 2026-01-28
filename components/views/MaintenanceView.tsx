@@ -198,21 +198,21 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
 
       {/* Filtros em Linha - Somente para Manutenção */}
       {activeModule === 'maintenance' && (
-        <div className="mb-4 flex flex-wrap gap-3">
-          <div className="flex-1 min-w-[200px] max-w-[280px]">
+        <div className="mb-4 flex flex-col md:flex-row gap-3">
+          <div className="w-full md:flex-1 md:min-w-[200px] md:max-w-[280px]">
             <TypeFilter
               filterMaintenanceType={filterMaintenanceType}
               setFilterMaintenanceType={setFilterMaintenanceType}
             />
           </div>
-          <div className="flex-1 min-w-[200px] max-w-[280px]">
+          <div className="w-full md:flex-1 md:min-w-[200px] md:max-w-[280px]">
             <AssigneeFilter
               selectedAssignees={filterMaintenanceAssignee}
               setSelectedAssignees={setFilterMaintenanceAssignee}
               allUsers={allUsers}
             />
           </div>
-          <div className="flex-1 min-w-[180px] max-w-[220px]">
+          <div className="w-full md:flex-1 md:min-w-[180px] md:max-w-[220px]">
             <MaintenanceStatusFilter
               selectedStatus={maintenanceStatusFilter}
               setSelectedStatus={setMaintenanceStatusFilter}
