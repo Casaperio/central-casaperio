@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Ticket, User, TicketStatus } from '../../types';
+import { ToastNotification } from '../../utils/notificationToastHelpers';
+import { playSuccessSound } from '../../utils/soundUtils';
 
 const TICKETS_STORAGE_KEY = 'casape_seen_ticket_ids';
 
@@ -8,6 +10,7 @@ interface UseTicketNotificationsProps {
   tickets: Ticket[];
   addNotification: (title: string, message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
   addLog: (action: string, details: string) => void;
+  addToast?: (notification: ToastNotification) => void;
 }
 
 /**
@@ -18,7 +21,8 @@ export function useTicketNotifications({
   currentUser,
   tickets,
   addNotification,
-  addLog
+  addLog,
+  addToast
 }: UseTicketNotificationsProps) {
   const previousTicketsRef = useRef<Ticket[]>([]);
 
@@ -29,7 +33,7 @@ export function useTicketNotifications({
     // Check if user has access to maintenance module
     const hasMaintenanceAccess = currentUser.role === 'Admin' ||
       currentUser.role === 'Maintenance' ||
-      currentUser.role === 'Faxineira' ||
+      currentUser.role === 'Limpeza' ||
       currentUser.allowedModules?.includes('maintenance');
 
     const hasGuestAccess = currentUser.role === 'Admin' ||
@@ -94,15 +98,20 @@ export function useTicketNotifications({
     const newTickets = tickets.filter(t => !previousMap.has(t.id) && t.category === 'maintenance');
 
     if (newTickets.length > 0 && hasMaintenanceAccess) {
-      const relevantNew = newTickets.filter(t =>
-        !t.isCheckoutTicket && t.createdBy !== currentUser.id
-      );
+      // Task 4: Limpeza NÃO recebe notificação de novos tickets, apenas quando for atribuído
+      const shouldNotifyNewTickets = currentUser.role !== 'Limpeza';
+      
+      if (shouldNotifyNewTickets) {
+        const relevantNew = newTickets.filter(t =>
+          !t.isCheckoutTicket && t.createdBy !== currentUser.id
+        );
 
-      if (relevantNew.length > 0) {
-        const msg = relevantNew.length === 1
-          ? `${relevantNew[0].serviceType} em ${relevantNew[0].propertyCode}`
-          : `${relevantNew.length} novos chamados`;
-        addNotification('Novo Chamado', msg, 'info');
+        if (relevantNew.length > 0) {
+          const msg = relevantNew.length === 1
+            ? `${relevantNew[0].serviceType} em ${relevantNew[0].propertyCode}`
+            : `${relevantNew.length} novos chamados`;
+          addNotification('Novo Chamado', msg, 'info');
+        }
       }
     }
 
@@ -110,13 +119,35 @@ export function useTicketNotifications({
     for (const ticket of tickets) {
       const prev = previousMap.get(ticket.id);
       if (prev) {
+        // Task 1: Suporte a múltiplos responsáveis
+        const currentAssignees = ticket.assignees || (ticket.assignee ? [ticket.assignee] : []);
+        const prevAssignees = prev.assignees || (prev.assignee ? [prev.assignee] : []);
+        
         // Check if newly assigned to current user
-        if (ticket.assignee === currentUser.name && prev.assignee !== currentUser.name) {
+        const wasAssigned = prevAssignees.includes(currentUser.name);
+        const isNowAssigned = currentAssignees.includes(currentUser.name);
+        
+        if (isNowAssigned && !wasAssigned) {
+          // Adicionar no histórico do NotificationCenter
           addNotification(
             'Chamado Atribuído',
             `${ticket.serviceType} em ${ticket.propertyCode}`,
             'warning'
           );
+          
+          // Disparar toast visual com som
+          if (addToast) {
+            const toastNotification: ToastNotification = {
+              id: `assignment-${ticket.id}-${Date.now()}`,
+              type: 'maintenance',
+              title: `🔧 Chamado Atribuído`,
+              message: `${ticket.serviceType}\n${ticket.propertyCode}\n${ticket.description || 'Sem descrição'}`,
+              data: ticket,
+              timestamp: new Date().toISOString(),
+            };
+            addToast(toastNotification);
+            playSuccessSound();
+          }
         }
 
         // Check for status changes on tickets assigned to current user

@@ -544,6 +544,7 @@ function AppContent() {
     currentUser,
     addNotification,
     addLog,
+    addToast: handleAddToast,
   });
 
   // ... (Auto-Checkout Logic) ...
@@ -647,6 +648,7 @@ function AppContent() {
     customStartDate,
     customEndDate,
     maintenanceOverrides,
+    currentUser, // Task 4: Passar currentUser para filtros de Limpeza
   });
 
   // Maintenance Pagination Hook
@@ -674,7 +676,7 @@ function AppContent() {
   }, [users]);
   
   const maintenanceUsers = useMemo(() => {
-      return users.filter(u => u.role === 'Maintenance' || u.role === 'Faxineira' || u.role === 'Admin');
+      return users.filter(u => u.role === 'Maintenance' || u.role === 'Limpeza' || u.role === 'Admin');
   }, [users]);
 
   const guestWorkload = useMemo(() => {

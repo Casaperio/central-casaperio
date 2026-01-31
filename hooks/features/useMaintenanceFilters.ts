@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Ticket, TicketStatus, Reservation, ReservationStatus } from '../../types';
+import { Ticket, TicketStatus, Reservation, ReservationStatus, User } from '../../types';
 import { getMaintenanceItemKey } from '../../utils';
 
 export type MaintenanceItem = Ticket | { type: 'checkout'; reservation: Reservation };
@@ -96,6 +96,8 @@ interface UseMaintenanceFiltersProps {
   customStartDate?: string;
   customEndDate?: string;
   maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>;
+  // Task 4: Adicionar currentUser para filtrar por role Limpeza
+  currentUser?: User | null;
 }
 
 export function useMaintenanceFilters({
@@ -112,6 +114,7 @@ export function useMaintenanceFilters({
   customStartDate = '',
   customEndDate = '',
   maintenanceOverrides = {},
+  currentUser,
 }: UseMaintenanceFiltersProps) {
 
   // Calcular intervalo de datas baseado no preset
@@ -186,6 +189,14 @@ export function useMaintenanceFilters({
     const list = tickets.filter(t => {
       const ticketCat = t.category || 'maintenance';
       if (ticketCat !== targetCategory) return false;
+
+      // Task 4: Filtro para role Limpeza - ver apenas tickets atribuídos
+      if (currentUser && currentUser.role === 'Limpeza') {
+        const assignees = t.assignees || (t.assignee ? [t.assignee] : []);
+        if (!assignees.includes(currentUser.name)) {
+          return false;
+        }
+      }
 
       // Filtrar items ocultos (dispensados pelo usuário)
       const itemKey = getMaintenanceItemKey(t);
@@ -358,6 +369,12 @@ export function useMaintenanceFilters({
           // REGRA DE UNICIDADE: Criar item virtual APENAS se não existir ticket real
           if (checkoutTicketReservationIds.has(r.id)) {
             return; // JÁ existe ticket real - não criar item virtual
+          }
+
+          // Task 4: Filtro para Limpeza - NÃO mostrar tickets virtuais de checkout
+          // Tickets virtuais não têm assignees, então Limpeza não deve vê-los
+          if (currentUser && currentUser.role === 'Limpeza') {
+            return; // Limpeza só vê tickets reais atribuídos a ele
           }
 
           // Filtrar checkouts ocultos (dispensados pelo usuário)

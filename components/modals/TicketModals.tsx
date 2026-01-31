@@ -20,7 +20,8 @@ interface TicketModalsProps {
  setSelectedTicket: React.Dispatch<React.SetStateAction<Ticket | null>>;
  users: UserWithPassword[];
  onUpdateStatus: (id: string, status: TicketStatus, date?: number, startedAt?: number, completionReport?: Ticket['completionReport']) => void;
- onAssignTicket: (id: string, assignee: string, date?: number) => void;
+ // Task 1: Alterado para aceitar array de responsáveis
+ onAssignTicket: (id: string, assignees: string[], date?: number) => void;
  onAddExpense: (ticketId: string, description: string, amount: number) => void;
  onDeleteExpense: (ticketId: string, expenseId: string) => void;
  onDeleteTicket: (id: string) => void;
@@ -170,7 +171,8 @@ const TicketModals: React.FC<TicketModalsProps> = ({
   }
  };
 
- const handleAssign = async (id: string, assignee: string, date: string) => {
+ // Task 1: Alterado para aceitar array de responsáveis
+ const handleAssign = async (id: string, assignees: string[], date: string) => {
   // Task 33: Verificar se é um ticket virtual de checkout
   const isVirtual = selectedTicket && (selectedTicket as any)._isVirtual === true;
 
@@ -184,15 +186,15 @@ const TicketModals: React.FC<TicketModalsProps> = ({
       // Ticket já existe - apenas atualizar
       await storageService.tickets.update({ 
         id: existingTicket.id, 
-        assignee, 
+        assignees, 
         scheduledDate: date, 
         updatedAt: Date.now() 
       } as any);
-      addLog('Chamado', `Atribuiu ${assignee} ao chamado de checkout`);
-      addNotification('Chamado Atualizado', `Responsável atribuído: ${assignee}`, 'info');
+      addLog('Chamado', `Atribuiu ${assignees.join(', ')} ao chamado de checkout`);
+      addNotification('Chamado Atualizado', `Responsáveis atribuídos: ${assignees.join(' • ')}`, 'info');
       setSelectedTicket((prev: Ticket | null) => (prev ? { 
         ...prev, 
-        assignee, 
+        assignees, 
         scheduledDate: date, 
         id: existingTicket.id,
         _isVirtual: false 
@@ -211,7 +213,7 @@ const TicketModals: React.FC<TicketModalsProps> = ({
         scheduledDate: date,
         guestAuth: selectedTicket.guestAuth,
         status: selectedTicket.status,
-        assignee: assignee,
+        assignees: assignees,
         createdBy: 'Sistema',
         createdByName: 'Automação de Check-out',
         createdAt: Date.now(),
@@ -223,15 +225,15 @@ const TicketModals: React.FC<TicketModalsProps> = ({
       };
 
       await storageService.tickets.add(realTicket);
-      addLog('Chamado', `Criou ticket de checkout e atribuiu ${assignee}`);
-      addNotification('Ticket Criado', `Ticket de checkout criado e atribuído a ${assignee}`, 'success');
+      addLog('Chamado', `Criou ticket de checkout e atribuiu ${assignees.join(', ')}`);
+      addNotification('Ticket Criado', `Ticket de checkout criado e atribuído a ${assignees.join(' • ')}`, 'success');
       setSelectedTicket(realTicket);
     }
   } else {
     // Ticket normal (não virtual) - apenas fazer update
-    storageService.tickets.update({ id, assignee, scheduledDate: date, updatedAt: Date.now() } as any);
-    addLog('Chamado', `Atribuiu ${assignee} ao chamado ${id}`);
-    setSelectedTicket((prev: Ticket | null) => (prev ? { ...prev, assignee, scheduledDate: date } : null));
+    storageService.tickets.update({ id, assignees, scheduledDate: date, updatedAt: Date.now() } as any);
+    addLog('Chamado', `Atribuiu ${assignees.join(', ')} ao chamado ${id}`);
+    setSelectedTicket((prev: Ticket | null) => (prev ? { ...prev, assignees, scheduledDate: date } : null));
   }
  };
 

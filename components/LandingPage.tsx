@@ -18,7 +18,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ user, onSelectModule, onLogou
  const canAccessOffice = !user.allowedModules || user.allowedModules.includes('office');
  
  // Field App access is implied for Maintenance and Cleaners
- const canAccessFieldApp = user.role === 'Maintenance' || user.role === 'Faxineira' || user.role === 'Admin';
+ const canAccessFieldApp = user.role === 'Maintenance' || user.role === 'Limpeza' || user.role === 'Admin';
 
  return (
   <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 animate-fade-in">

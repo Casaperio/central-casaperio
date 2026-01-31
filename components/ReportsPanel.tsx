@@ -324,7 +324,7 @@ const ReportsPanel: React.FC<ReportsPanelProps> = ({ tickets, reservations = [] 
             <div className="font-bold text-gray-900">{ticket.propertyCode}</div>
             <div className="text-xs text-gray-500">{ticket.status}</div>
           </td>
-          <td className="p-4 text-gray-700 font-medium">{ticket.assignee || '-'}</td>
+          <td className="p-4 text-gray-700 font-medium">{ticket.assignees && ticket.assignees.length > 0 ? ticket.assignees.join(' • ') : ticket.assignee || '-'}</td>
           <td className="p-4 text-gray-700">{ticket.serviceType}</td>
           <td className="p-4 text-gray-600">{new Date(ticket.createdAt).toLocaleDateString()}</td>
           <td className="p-4 text-right font-bold text-gray-800">R$ {ticket.totalExpenses.toFixed(2).replace('.', ',')}</td>
