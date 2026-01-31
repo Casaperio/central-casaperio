@@ -11,6 +11,7 @@ import {
 import { formatCurrency, parseLocalDate, formatDatePtBR, getTodayBrazil, isToday as checkIsToday, getMaintenanceItemKey, getReservationCardColors } from '../utils';
 import { getDetailedFinancials, getCalendar } from '../services/staysApiService';
 import { storageService } from '../services/storage';
+import { isAutomaticCheckoutTicket } from '../utils/ticketFilters';
 import ReservationDetailModal from './ReservationDetailModal';
 
 interface GuestCRMProps {
@@ -251,10 +252,10 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
   });
 
   // 3. Process Tickets (Link by reservation ID or fuzzy name/date match)
-  // Task 79: Excluir chamados de checkout automático do GuestCRM
+  // Task 79: Excluir chamados de checkout automático do GuestCRM (filtro centralizado)
   tickets.forEach(t => {
     // Task 79: CRÍTICO - Ignorar chamados de checkout automático
-    if (t.isCheckoutTicket) return;
+    if (isAutomaticCheckoutTicket(t)) return;
     
     // Find guest by Reservation ID
     if (t.reservationId) {
