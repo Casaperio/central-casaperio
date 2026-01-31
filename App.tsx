@@ -17,8 +17,6 @@ import { usePropertiesData } from './hooks/usePropertiesData';
 import { triggerSync, getSyncStatus, getAllData } from './services/staysApiService';
 import { CONCIERGE_SERVICE_TYPES } from './constants';
 import PlatformIcon from './components/PlatformIcon';
-import Confetti from 'react-confetti';
-import { useWindowSize } from 'react-use';
 import { playSuccessSound } from './utils/soundUtils';
 import { canAccessView, canAccessModule, getFirstAllowedModule, getDefaultViewForModule as getDefaultViewFromPermissions, getAccessDeniedMessage } from './utils/permissions';
 import { getDefaultPeriodForRoute } from './utils/performanceUtils';
@@ -48,8 +46,8 @@ import ReservationModals from './components/modals/ReservationModals';
 // Hooks
 import { useNotifications } from './hooks/app/useNotifications';
 import { useDataSubscriptions } from './hooks/app/useDataSubscriptions';
-import { useNewReservationDetector } from './hooks/features/useNewReservationDetector';
-import { useNewMaintenanceTicketDetector } from './hooks/features/useNewMaintenanceTicketDetector';
+import { useNewReservationDetector } from './hooks/features/useNewReservationDetectorV2';
+import { useNewMaintenanceTicketDetector } from './hooks/features/useNewMaintenanceTicketDetectorV2';
 import { useTicketNotifications } from './hooks/features/useTicketNotifications';
 import { useWebRTCCall } from './hooks/features/useWebRTCCall';
 import { useMaintenanceFilters, PeriodPreset } from './hooks/features/useMaintenanceFilters';
@@ -97,7 +95,6 @@ import PropertiesTool from './components/PropertiesTool';
 import FinancialPanel from './components/FinancialPanel';
 import ConciergeCMS from './components/ConciergeCMS';
 import MapPanel from './components/MapPanel';
-import { CelebrationPopup } from './components/celebrations/CelebrationPopup';
 import { MaintenanceView } from './components/views/MaintenanceView';
 import { GuestView } from './components/views/GuestView';
 import { StaffCallModal } from './components/modals/StaffCallModal';
@@ -203,10 +200,7 @@ function AppContent() {
     maintenanceOverrides,
   } = useDataSubscriptions(isDbConnected, kioskProperty);
 
-  // Celebration Confetti State
-  const { width, height } = useWindowSize();
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [newReservations, setNewReservations] = useState<Reservation[]>([]);
+  // (Celebration Popup removido - usando apenas toast + sininho)
 
   // Properties Data (from stays-api MongoDB) - ÚNICA FONTE DE PROPRIEDADES
   const {
@@ -477,15 +471,15 @@ function AppContent() {
     setToastNotifications(prev => [...prev, notification]);
   }, []);
 
-  // 🔔 New Reservation Detector Hook (Reescrito)
+  // 🔔 New Reservation Detector Hook V2 (Feed fixo + sem popup)
   useNewReservationDetector({
-    staysReservations,
     currentUser,
     hasPermission: (perm: string) => canAccessModule(currentUser, perm as any),
     onNewReservations: (newReservations) => {
       const isOnline = navigator.onLine;
       const isVisible = document.visibilityState === 'visible';
-      const shouldShowToast = isOnline && isVisible;
+      const hasFocus = document.hasFocus();
+      const shouldShowToast = isOnline && isVisible && hasFocus;
 
       // 🔔 SEMPRE adicionar ao NotificationCenter
       newReservations.forEach(reservation => {
@@ -494,7 +488,7 @@ function AppContent() {
         addNotification(title, message, 'info');
       });
 
-      // 🎨 TOAST: apenas se online + visível
+      // 🎨 TOAST + SOM: apenas se online + visível + com foco
       if (shouldShowToast) {
         if (newReservations.length === 1) {
           const toast = notifyReservationToast(newReservations[0]);
@@ -503,21 +497,14 @@ function AppContent() {
           const toast = notifyReservationsToastMany(newReservations);
           handleAddToast(toast);
         }
-
-        // Confetti
-        setNewReservations(newReservations);
-        setShowConfetti(true);
-        setTimeout(() => {
-          setShowConfetti(false);
-          setNewReservations([]);
-        }, 5000);
+        playSuccessSound();
       } else {
-        console.log(`📢 [App] ${newReservations.length} novas reservas registradas no NotificationCenter (toast desabilitado: ${!isOnline ? 'offline' : 'aba oculta'})`);
+        console.log(`📢 [App] ${newReservations.length} novas reservas registradas no NotificationCenter (toast/som desabilitados: ${!isOnline ? 'offline' : !isVisible ? 'aba oculta' : 'sem foco'})`);
       }
     },
   });
 
-  // 🔧 New Maintenance Ticket Detector Hook
+  // 🔧 New Maintenance Ticket Detector Hook V2 (com filtro de checkout automático)
   useNewMaintenanceTicketDetector({
     tickets,
     currentUser,
@@ -525,7 +512,8 @@ function AppContent() {
     onNewTickets: (newTickets) => {
       const isOnline = navigator.onLine;
       const isVisible = document.visibilityState === 'visible';
-      const shouldShowToast = isOnline && isVisible;
+      const hasFocus = document.hasFocus();
+      const shouldShowToast = isOnline && isVisible && hasFocus;
 
       // 🔔 SEMPRE adicionar ao NotificationCenter
       newTickets.forEach(ticket => {
@@ -534,7 +522,7 @@ function AppContent() {
         addNotification(title, message, 'warning');
       });
 
-      // 🎨 TOAST: apenas se online + visível
+      // 🎨 TOAST + SOM: apenas se online + visível + com foco
       if (shouldShowToast) {
         if (newTickets.length === 1) {
           const toast = notifyMaintenanceTicketToast(newTickets[0]);
@@ -543,8 +531,9 @@ function AppContent() {
           const toast = notifyMaintenanceTicketsToastMany(newTickets);
           handleAddToast(toast);
         }
+        playSuccessSound();
       } else {
-        console.log(`📢 [App] ${newTickets.length} novos tickets registrados no NotificationCenter (toast desabilitado: ${!isOnline ? 'offline' : 'aba oculta'})`);
+        console.log(`📢 [App] ${newTickets.length} novos tickets registrados no NotificationCenter (toast/som desabilitados: ${!isOnline ? 'offline' : !isVisible ? 'aba oculta' : 'sem foco'})`);
       }
     },
   });
@@ -793,19 +782,7 @@ function AppContent() {
   );
 
   if (!isDbConnected || !currentUser || viewMode === 'landing') {
-    return (
-      <>
-        {loadingScreen}
-        {viewMode === 'landing' && (
-          <CelebrationPopup
-            show={showConfetti}
-            newReservations={newReservations}
-            onClose={() => setShowConfetti(false)}
-            windowSize={{ width, height }}
-          />
-        )}
-      </>
-    );
+    return loadingScreen;
   }
 
   return (
@@ -1044,13 +1021,7 @@ function AppContent() {
         />
       )}
 
-      {/* Celebration Confetti Popup */}
-      <CelebrationPopup
-        show={showConfetti}
-        newReservations={newReservations}
-        onClose={() => setShowConfetti(false)}
-        windowSize={{ width, height }}
-      />
+      {/* Celebration Popup removido - usando apenas toast + sininho */}
 
       {/* Test Button (fixed position) - COMENTADO */}
       {/* <button

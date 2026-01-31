@@ -5,6 +5,8 @@
  * Persiste no localStorage para manter estado entre reloads
  */
 
+import { sessionManagerLogger } from '../utils/logger';
+
 interface NotificationSession {
   sessionStartedAt: string; // ISO timestamp do login
   seenReservationIds: string[]; // IDs já conhecidos
@@ -28,9 +30,9 @@ class NotificationSessionManager {
     if (stored) {
       try {
         this.session = JSON.parse(stored);
-        console.log('📋 [Notification Session] Recuperada do localStorage:', this.session?.sessionStartedAt);
+        sessionManagerLogger.debug('Sessão recuperada do localStorage');
       } catch (e) {
-        console.error('[Notification Session] Erro ao parsear sessão, criando nova:', e);
+        sessionManagerLogger.error('Erro ao parsear sessão, criando nova', e);
         this.createNewSession();
       }
     } else {
@@ -51,7 +53,7 @@ class NotificationSessionManager {
     };
     
     this.persist();
-    console.log('✨ [Notification Session] Nova sessão criada:', this.session.sessionStartedAt);
+    sessionManagerLogger.info('Nova sessão criada');
   }
 
   /**

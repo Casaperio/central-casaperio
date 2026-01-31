@@ -6,6 +6,8 @@ import { checkFlightStatus } from '../services/geminiService';
 import { storageService } from '../services/storage';
 import { getReservationOverrideKey, formatDatePtBR } from '../utils';
 
+import { isAutomaticCheckoutTicket } from '../utils/ticketFilters';
+
 interface ReservationDetailModalProps {
  reservation: Reservation;
  currentUser: User;
@@ -134,7 +136,7 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  }, [getEditableFields]);
 
  // Linked Tickets Logic
- // Task 79: Excluir chamados de checkout automático do histórico
+ // Task 79: Excluir chamados de checkout automático do histórico (usando filtro centralizado)
  const linkedTickets = tickets.filter(t =>
    // Filtro primário: reservationId match OU tickets durante período da reserva
    (t.reservationId === reservation.id ||
@@ -142,8 +144,8 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
    (t.propertyCode === reservation.propertyCode &&
     t.createdAt >= new Date(reservation.checkInDate).getTime() &&
     t.createdAt <= new Date(reservation.checkOutDate).getTime())) &&
-   // Task 79: CRÍTICO - Excluir chamados de checkout automático
-   !t.isCheckoutTicket
+   // Task 79: CRÍTICO - Excluir chamados de checkout automático (filtro centralizado)
+   !isAutomaticCheckoutTicket(t)
  ).sort((a,b) => b.createdAt - a.createdAt);
 
  // Carrega a nota do hóspede do Firestore
