@@ -387,6 +387,7 @@ export function ModuleRouter({
           columns={boardColumns}
           cards={boardCards}
           users={users}
+          currentUser={currentUser}
           onBack={() => setSelectedBoard(null)}
           onAddColumn={(title) => {
             storageService.boardColumns.add({
@@ -398,6 +399,10 @@ export function ModuleRouter({
           }}
           onUpdateColumn={(col) => storageService.boardColumns.update(col)}
           onDeleteColumn={(id) => storageService.boardColumns.delete(id)}
+          onReorderColumns={(cols) => {
+            // Task 3: Persistir reordenação de colunas
+            cols.forEach(col => storageService.boardColumns.update(col));
+          }}
           onAddCard={(card) => storageService.boardCards.add(card)}
           onUpdateCard={(card) => storageService.boardCards.update(card)}
           onDeleteCard={(id) => storageService.boardCards.delete(id)}
