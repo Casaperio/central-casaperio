@@ -30,7 +30,6 @@ class NotificationSessionManager {
     if (stored) {
       try {
         this.session = JSON.parse(stored);
-        sessionManagerLogger.debug('Sessão recuperada do localStorage');
       } catch (e) {
         sessionManagerLogger.error('Erro ao parsear sessão, criando nova', e);
         this.createNewSession();

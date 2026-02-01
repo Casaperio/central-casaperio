@@ -7,9 +7,11 @@ import { parseLocalDate, getTodayBrazil } from '../utils';
 interface GeneralCalendarProps {
  units: CalendarUnit[];
  onReservationClick: (res: CalendarReservation) => void;
+ // Task 2: Callback para notificar mudança de período visível
+ onVisibleRangeChange?: (startDate: Date, days: number, isFullscreen: boolean) => void;
 }
 
-const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationClick }) => {
+const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationClick, onVisibleRangeChange }) => {
  const [startDate, setStartDate] = useState(() => {
   const today = getTodayBrazil();
   today.setDate(today.getDate() - 2);
@@ -232,6 +234,13 @@ const GeneralCalendar: React.FC<GeneralCalendarProps> = ({ units, onReservationC
   newDate.setDate(newDate.getDate() + days);
   setStartDate(newDate);
  };
+
+ // Task 2: Notificar mudanças no range visível para carregar mais dados
+ useEffect(() => {
+  if (onVisibleRangeChange) {
+    onVisibleRangeChange(startDate, CONFIG.DAYS, isFullscreen);
+  }
+ }, [startDate, CONFIG.DAYS, isFullscreen, onVisibleRangeChange]);
 
  // Zoom controls (separados por modo)
  const handleZoomIn = () => {
