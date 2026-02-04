@@ -4,7 +4,7 @@ import {
  Kanban, List, ArrowLeft, Plus, MoreHorizontal, Calendar as CalendarIcon, User as UserIcon,
  CheckSquare, Trash2, ChevronRight, CheckCircle2, Clock, MoveRight, MoveLeft,
  X, Check, AlertTriangle, AlertCircle, Filter, CalendarDays, AtSign,
- Paperclip, Upload, FileText, Image, Video, Table, File, Loader2, Download, ExternalLink
+ Paperclip, Upload, FileText, Image, Video, Table, File, Loader2, Download, ExternalLink, GripVertical
 } from 'lucide-react';
 
 interface BoardDetailProps {
@@ -17,6 +17,8 @@ interface BoardDetailProps {
  onAddColumn: (title: string) => void;
  onUpdateColumn: (column: BoardColumn) => void;
  onDeleteColumn: (id: string) => void;
+ // Task 3: Callback para reordenar colunas
+ onReorderColumns: (columns: BoardColumn[]) => void;
  onAddCard: (card: BoardCard) => void;
  onUpdateCard: (card: BoardCard) => void;
  onDeleteCard: (id: string) => void;
@@ -26,7 +28,7 @@ interface BoardDetailProps {
 
 const BoardDetail: React.FC<BoardDetailProps> = ({
  board, columns, cards, users, currentUser, onBack,
- onAddColumn, onUpdateColumn, onDeleteColumn,
+ onAddColumn, onUpdateColumn, onDeleteColumn, onReorderColumns,
  onAddCard, onUpdateCard, onDeleteCard,
  onUpdateBoard, onDeleteBoard
 }) => {
@@ -58,6 +60,8 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
 
  // DnD State
  const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
+ // Task 3: State para drag-and-drop de colunas
+ const [draggedColumnId, setDraggedColumnId] = useState<string | null>(null);
 
  // Derived State
  const boardColumns = useMemo(() => 
@@ -223,6 +227,54 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
      onUpdateCard({ ...card, columnId: targetColumnId });
    }
    setDraggedCardId(null);
+ };
+
+ // Task 3: Drag-and-drop de colunas
+ const onColumnDragStart = (e: React.DragEvent, columnId: string) => {
+   setDraggedColumnId(columnId);
+   e.dataTransfer.effectAllowed = 'move';
+   e.dataTransfer.setData('text/column', columnId);
+ };
+
+ const onColumnDragOver = (e: React.DragEvent) => {
+   e.preventDefault();
+   e.dataTransfer.dropEffect = 'move';
+ };
+
+ const onColumnDrop = (e: React.DragEvent, targetColumnId: string) => {
+   e.preventDefault();
+   e.stopPropagation(); // Evita conflito com drop de cards
+   
+   const sourceColumnId = e.dataTransfer.getData('text/column');
+   
+   if (!sourceColumnId || sourceColumnId === targetColumnId) {
+     setDraggedColumnId(null);
+     return;
+   }
+   
+   // Encontrar índices
+   const sourceIndex = boardColumns.findIndex(col => col.id === sourceColumnId);
+   const targetIndex = boardColumns.findIndex(col => col.id === targetColumnId);
+   
+   if (sourceIndex === -1 || targetIndex === -1) {
+     setDraggedColumnId(null);
+     return;
+   }
+   
+   // Reordenar array
+   const reorderedColumns = [...boardColumns];
+   const [movedColumn] = reorderedColumns.splice(sourceIndex, 1);
+   reorderedColumns.splice(targetIndex, 0, movedColumn);
+   
+   // Atualizar campo order de cada coluna
+   const updatedColumns = reorderedColumns.map((col, index) => ({
+     ...col,
+     order: index
+   }));
+   
+   // Persistir nova ordem
+   onReorderColumns(updatedColumns);
+   setDraggedColumnId(null);
  };
 
  const addCheckItem = () => {
@@ -455,16 +507,36 @@ const BoardDetail: React.FC<BoardDetailProps> = ({
      <div className="flex h-full gap-6">
       {boardColumns.map(column => {
        const colCards = boardCards.filter(c => c.columnId === column.id).sort((a,b) => a.order - b.order);
+       const isDraggingColumn = draggedColumnId === column.id;
+       
        return (
         <div 
           key={column.id} 
-          className="w-80 flex-shrink-0 flex flex-col bg-gray-100/50 rounded-none border border-gray-200 max-h-full transition-colors"
-          onDragOver={onDragOver}
-          onDrop={(e) => onDrop(e, column.id)}
+          className={`w-80 flex-shrink-0 flex flex-col bg-gray-100/50 rounded-none border max-h-full transition-all ${
+            isDraggingColumn ? 'opacity-50 border-brand-500' : 'border-gray-200'
+          }`}
+          onDragOver={(e) => {
+            onDragOver(e); // Para cards
+            onColumnDragOver(e); // Para colunas
+          }}
+          onDrop={(e) => {
+            // Verificar se é coluna ou card
+            const isColumn = e.dataTransfer.types.includes('text/column');
+            if (isColumn) {
+              onColumnDrop(e, column.id);
+            } else {
+              onDrop(e, column.id);
+            }
+          }}
         >
-         {/* Column Header */}
-         <div className="p-3 font-bold text-gray-700 flex justify-between items-center border-b border-gray-200 bg-gray-50 rounded-t-xl">
+         {/* Column Header - Dragável */}
+         <div 
+           draggable
+           onDragStart={(e) => onColumnDragStart(e, column.id)}
+           className="p-3 font-bold text-gray-700 flex justify-between items-center border-b border-gray-200 bg-gray-50 rounded-t-xl cursor-move hover:bg-gray-100 transition-colors"
+         >
           <span className="flex items-center gap-2">
+            <GripVertical size={16} className="text-gray-400 flex-shrink-0" />
             {column.title}
             <span className="bg-gray-200 text-gray-600 text-[10px] px-1.5 py-0.5 rounded-full">{colCards.length}</span>
           </span>

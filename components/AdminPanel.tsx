@@ -15,7 +15,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, onAddUser, onDeleteUser,
  const [newName, setNewName] = useState('');
  const [newEmail, setNewEmail] = useState('');
  const [newPassword, setNewPassword] = useState('');
- const [newRole, setNewRole] = useState<'Guest Relations' | 'Maintenance' | 'Admin' | 'Faxineira' | 'Administrativo'>('Guest Relations');
+ // Roles disponíveis (Faxineira removida)
+ const [newRole, setNewRole] = useState<'Guest Relations' | 'Maintenance' | 'Admin' | 'Administrativo' | 'Limpeza'>('Guest Relations');
  const [selectedModules, setSelectedModules] = useState<AppModule[]>(['maintenance', 'guest']);
 
  // Modal State
@@ -48,6 +49,32 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, onAddUser, onDeleteUser,
     ? prev.filter(m => m !== module)
     : [...prev, module]
   );
+ };
+
+ // Auto-selecionar módulos baseado no role
+ const handleRoleChange = (role: typeof newRole) => {
+  setNewRole(role);
+  
+  // Configurar módulos automaticamente por role
+  switch (role) {
+   case 'Limpeza':
+    setSelectedModules(['maintenance']); // Limpeza só vê Manutenção
+    break;
+   case 'Maintenance':
+    setSelectedModules(['maintenance']);
+    break;
+   case 'Admin':
+    setSelectedModules(['maintenance', 'concierge', 'guest', 'reservations', 'inventory', 'office', 'management']);
+    break;
+   case 'Guest Relations':
+    setSelectedModules(['guest', 'reservations', 'concierge']);
+    break;
+   case 'Administrativo':
+    setSelectedModules(['office', 'inventory']);
+    break;
+   default:
+    setSelectedModules(['maintenance', 'guest']);
+  }
  };
 
  const handleSubmit = (e: React.FormEvent) => {
@@ -326,22 +353,24 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, onAddUser, onDeleteUser,
 
         <div>
          <label className="block text-sm font-medium text-gray-700 mb-1">Função / Cargo</label>
+         <p className="text-xs text-gray-500 mb-2">Define o perfil e permissões do usuário</p>
          <select
           value={newRole}
-          onChange={e => setNewRole(e.target.value as any)}
+          onChange={e => handleRoleChange(e.target.value as any)}
           className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none"
          >
-          <option value="Guest Relations">Guest Relations</option>
-          <option value="Maintenance">Manutenção</option>
-          <option value="Admin">Admin</option>
-          <option value="Faxineira">Faxineira</option>
-          <option value="Administrativo">Administrativo</option>
+          <option value="Guest Relations">Guest Relations - Atendimento ao hóspede</option>
+          <option value="Maintenance">Gerente de Manutenção - Gestão completa</option>
+          <option value="Limpeza">Limpeza - Acesso restrito aos seus tickets</option>
+          <option value="Administrativo">Administrativo - Escritório e inventário</option>
+          <option value="Admin">Admin - Acesso total ao sistema</option>
          </select>
         </div>
 
         <div>
-         <label className="block text-sm font-medium text-gray-700 mb-2">Permissão de Acesso</label>
-         <div className="flex flex-col gap-1 border border-gray-100 rounded-lg p-2 max-h-60 overflow-y-auto">
+         <label className="block text-sm font-medium text-gray-700 mb-1">Módulos de Acesso</label>
+         <p className="text-xs text-gray-500 mb-2">Selecione quais partes do sistema o usuário pode acessar</p>
+         <div className="flex flex-col gap-1 border border-gray-100 rounded-lg p-2 max-h-60 overflow-y-auto bg-gray-50">
           <PermissionOption 
             module="maintenance" label="Manutenção" icon={<Wrench size={16}/>} 
             isChecked={selectedModules.includes('maintenance')} onToggle={() => handleModuleToggle('maintenance')} colorClass="text-brand-600 bg-brand-100" 
@@ -430,10 +459,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, onAddUser, onDeleteUser,
              <span className={`px-2 py-1 rounded-full text-xs font-semibold
               ${user.role === 'Admin' ? 'bg-purple-100 text-purple-700' : 
                user.role === 'Maintenance' ? 'bg-orange-100 text-orange-700' : 
+               user.role === 'Limpeza' ? 'bg-green-100 text-green-700' :
+               (user.role as any) === 'Faxineira' ? 'bg-green-100 text-green-700' : // Dados antigos → exibir como Limpeza
                user.role === 'Guest Relations' ? 'bg-blue-100 text-blue-700' :
+               user.role === 'Administrativo' ? 'bg-indigo-100 text-indigo-700' :
                'bg-gray-100 text-gray-700'
               }`}>
-              {user.role}
+              {user.role === 'Maintenance' ? 'Gerente de Manutenção' :
+               user.role === 'Limpeza' ? 'Limpeza' :
+               (user.role as any) === 'Faxineira' ? 'Limpeza' : // Dados antigos → exibir como Limpeza
+               user.role === 'Guest Relations' ? 'Guest Relations' :
+               user.role === 'Administrativo' ? 'Administrativo' :
+               user.role === 'Admin' ? 'Admin' :
+               user.role}
              </span>
             </td>
             <td className="p-4">

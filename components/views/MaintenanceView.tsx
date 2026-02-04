@@ -329,7 +329,8 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                           ticket.isCheckoutTicket ? 'ring-2 ring-violet-500 bg-violet-50' :
                           ticket.isGuestRequest ? 'ring-2 ring-yellow-500 bg-yellow-50' :
                           ticket.isPreventive ? 'ring-1 ring-blue-300 bg-blue-50' :
-                          (!ticket.scheduledDate && !ticket.assignee) ? 'ring-2 ring-orange-500 bg-orange-50' :
+                          // Task 1: Verificar múltiplos assignees
+                          (!ticket.scheduledDate && !(ticket.assignees && ticket.assignees.length > 0) && !ticket.assignee) ? 'ring-2 ring-orange-500 bg-orange-50' :
                           'border-gray-200 bg-white'
                         }`}
                       >
@@ -378,11 +379,18 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                         <h3 className="mb-1 text-base font-bold text-gray-900 truncate">{ticket.propertyCode}</h3>
                         <p className="h-10 mb-3 text-sm text-gray-500 line-clamp-2">{ticket.description}</p>
                         
-                        {/* Responsável Técnico - Texto discreto sempre visível */}
+                        {/* Responsável Técnico - Texto discreto sempre visível - Task 1: Suporte a múltiplos */}
                         <div className="flex items-center gap-1.5 text-xs mt-1">
                           <User size={12} className="text-gray-400" />
-                          <span className={ticket.assignee ? "text-gray-600 font-medium" : "text-gray-400 italic"}>
-                            {ticket.assignee || "Não atribuído"}
+                          <span className={(ticket.assignees && ticket.assignees.length > 0) || ticket.assignee ? "text-gray-600 font-medium" : "text-gray-400 italic"}>
+                            {(() => {
+                              // Filtrar 'Não atribuído' do array
+                              const validAssignees = (ticket.assignees || []).filter(a => a && a !== 'Não atribuído');
+                              if (validAssignees.length > 0) {
+                                return validAssignees.join(' • ');
+                              }
+                              return ticket.assignee && ticket.assignee !== 'Não atribuído' ? ticket.assignee : 'Não atribuído';
+                            })()}
                           </span>
                         </div>
                       </div>
@@ -480,7 +488,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                         ticket.isCheckoutTicket ? 'bg-violet-50 border-violet-200 hover:bg-violet-100' :
                         ticket.isGuestRequest ? 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100' :
                         ticket.isPreventive ? 'bg-blue-50 border-blue-200 hover:bg-blue-100' :
-                        (!ticket.scheduledDate && !ticket.assignee) ? 'bg-orange-50 border-orange-200 hover:bg-orange-100' :
+                        (!ticket.scheduledDate && !(ticket.assignees && ticket.assignees.length > 0) && !ticket.assignee) ? 'bg-orange-50 border-orange-200 hover:bg-orange-100' :
                         'bg-white border-gray-200 hover:bg-gray-50'
                       }`}
                     >
@@ -516,11 +524,18 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                             <AlertCircle size={10} /> PROBLEMA
                           </span>
                         )}
-                        {/* Responsável Técnico - Texto discreto sempre visível */}
+                        {/* Responsável Técnico - Texto discreto sempre visível - Task 1: Suporte a múltiplos */}
                         <span className="flex items-center gap-1 text-xs">
                           <User size={12} className="text-gray-400" />
-                          <span className={ticket.assignee ? "text-gray-600 font-medium" : "text-gray-400 italic"}>
-                            {ticket.assignee || "Não atribuído"}
+                          <span className={(ticket.assignees && ticket.assignees.length > 0) || ticket.assignee ? "text-gray-600 font-medium" : "text-gray-400 italic"}>
+                            {(() => {
+                              // Filtrar 'Não atribuído' do array
+                              const validAssignees = (ticket.assignees || []).filter(a => a && a !== 'Não atribuído');
+                              if (validAssignees.length > 0) {
+                                return validAssignees.join(' • ');
+                              }
+                              return ticket.assignee && ticket.assignee !== 'Não atribuído' ? ticket.assignee : 'Não atribuído';
+                            })()}
                           </span>
                         </span>
                         {/* Data por último */}

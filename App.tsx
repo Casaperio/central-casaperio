@@ -53,6 +53,7 @@ import { useWebRTCCall } from './hooks/features/useWebRTCCall';
 import { useMaintenanceFilters, PeriodPreset } from './hooks/features/useMaintenanceFilters';
 import { useMaintenancePagination } from './hooks/features/useMaintenancePagination';
 import { notificationSessionManager } from './services/notificationSessionManager';
+import { useDynamicCalendarRange } from './hooks/useDynamicCalendarRange';
 import { 
   setNotificationCenterCallback,
   notifyReservationToast,
@@ -317,6 +318,24 @@ function AppContent() {
   // Guest Status Filter (default: ['ALL'] - todos os status)
   const [guestSelectedStatuses, setGuestSelectedStatuses] = useState<string[]>(['ALL']);
 
+  // Task 2: Período dinâmico para calendário - expande conforme navegação
+  const [calendarVisibleStart, setCalendarVisibleStart] = useState<Date>(() => {
+    const today = new Date();
+    today.setDate(today.getDate() - 2);
+    return today;
+  });
+  const [calendarVisibleDays, setCalendarVisibleDays] = useState<number>(31);
+  const [calendarDataRange, setCalendarDataRange] = useState<{ from: string; to: string } | null>(null);
+
+  // Reset calendar range quando sair do view de calendário
+  useEffect(() => {
+    if (viewMode !== 'general-calendar' && viewMode !== 'map') {
+      if (calendarDataRange) {
+        setCalendarDataRange(null);
+      }
+    }
+  }, [viewMode, calendarDataRange]);
+
   // 🚀 FASE 1: Períodos dinâmicos por rota/módulo
   // Compute data period based on current module and view
   const staysDataPeriod = useMemo(() => {
@@ -332,8 +351,16 @@ function AppContent() {
     } else if (activeModule === 'guest' || viewMode === 'guest-crm') {
       // Hóspedes: últimos 7 dias até próximos 30 dias
       routeIdentifier = 'guest';
-    } else if (activeModule === 'reservations' || viewMode === 'calendar') {
-      // Reservas/Calendário: mês atual até +3 meses
+    } else if (activeModule === 'reservations' || viewMode === 'calendar' || viewMode === 'general-calendar') {
+      // Task 2: Se o calendário expandiu o range dinamicamente, usar ele
+      // Senão, usar período padrão
+      if (calendarDataRange) {
+        return {
+          from: calendarDataRange.from,
+          to: calendarDataRange.to,
+          routeIdentifier: 'reservations',
+        };
+      }
       routeIdentifier = 'reservations';
     } else if (activeModule === 'management') {
       // Gestão: últimos 30 dias até próximos 60 dias
@@ -350,7 +377,7 @@ function AppContent() {
       ...period,
       routeIdentifier,
     };
-  }, [activeModule, viewMode]);
+  }, [activeModule, viewMode, calendarDataRange]);
 
   // Stays API Data (from stays-api backend)
   // � AUTO-REFRESH INTELIGENTE:
@@ -405,6 +432,73 @@ function AppContent() {
     
     return () => clearTimeout(timer);
   }, [staysDataPeriod.routeIdentifier, staysLoading, staysRefetching, queryClient]);
+
+  // Task 2: Handler para expansão dinâmica do range do calendário
+  const handleCalendarVisibleRangeChange = useCallback((startDate: Date, days: number, isFullscreen: boolean) => {
+    // Calcular data final visível
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + days);
+    
+    // Formatar datas
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    const visibleFrom = formatDate(startDate);
+    const visibleTo = formatDate(endDate);
+    
+    // Se não tem range definido ainda, inicializar com margem generosa
+    if (!calendarDataRange) {
+      // Inicializar com buffer: 90 dias antes e 180 dias depois
+      const initialStart = new Date(startDate);
+      initialStart.setDate(initialStart.getDate() - 90);
+      
+      const initialEnd = new Date(endDate);
+      initialEnd.setDate(initialEnd.getDate() + 180);
+      
+      const newFrom = formatDate(initialStart);
+      const newTo = formatDate(initialEnd);
+      
+      setCalendarDataRange({ from: newFrom, to: newTo });
+      return;
+    }
+    
+    // Verificar se precisa expandir
+    const BUFFER_DAYS = 30; // Buffer para trigger de expansão
+    const EXPANSION_DAYS = 90; // Dias para expandir
+    
+    const dataStart = new Date(calendarDataRange.from);
+    const dataEnd = new Date(calendarDataRange.to);
+    
+    let needsExpansion = false;
+    let newFrom = calendarDataRange.from;
+    let newTo = calendarDataRange.to;
+    
+    // Verifica se está próximo do início do range (navegando para trás)
+    const daysFromStart = Math.floor((startDate.getTime() - dataStart.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysFromStart < BUFFER_DAYS && daysFromStart >= 0) {
+      const newStart = new Date(dataStart);
+      newStart.setDate(newStart.getDate() - EXPANSION_DAYS);
+      newFrom = formatDate(newStart);
+      needsExpansion = true;
+    }
+    
+    // Verifica se está próximo do fim do range (navegando para frente)
+    const daysToEnd = Math.floor((dataEnd.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysToEnd < BUFFER_DAYS && daysToEnd >= 0) {
+      const newEnd = new Date(dataEnd);
+      newEnd.setDate(newEnd.getDate() + EXPANSION_DAYS);
+      newTo = formatDate(newEnd);
+      needsExpansion = true;
+    }
+    
+    if (needsExpansion) {
+      setCalendarDataRange({ from: newFrom, to: newTo });
+    }
+  }, [calendarDataRange]);
 
   // Combine loading states
   const isGlobalLoading = staysLoading || staysRefetching;
@@ -544,6 +638,7 @@ function AppContent() {
     currentUser,
     addNotification,
     addLog,
+    addToast: handleAddToast,
   });
 
   // ... (Auto-Checkout Logic) ...
@@ -647,6 +742,7 @@ function AppContent() {
     customStartDate,
     customEndDate,
     maintenanceOverrides,
+    currentUser, // Task 4: Passar currentUser para filtros de Limpeza
   });
 
   // Maintenance Pagination Hook
@@ -674,7 +770,7 @@ function AppContent() {
   }, [users]);
   
   const maintenanceUsers = useMemo(() => {
-      return users.filter(u => u.role === 'Maintenance' || u.role === 'Faxineira' || u.role === 'Admin');
+      return users.filter(u => u.role === 'Maintenance' || u.role === 'Limpeza' || u.role === 'Admin');
   }, [users]);
 
   const guestWorkload = useMemo(() => {
@@ -960,6 +1056,7 @@ function AppContent() {
              handleActivateTablet={handleActivateTablet}
              handleOpenFieldApp={handleOpenFieldApp}
              maintenanceOverrides={maintenanceOverrides}
+             onCalendarVisibleRangeChange={handleCalendarVisibleRangeChange}
            />
 
         </main>

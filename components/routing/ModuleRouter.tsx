@@ -83,6 +83,8 @@ interface ModuleRouterProps {
   handleActivateTablet: (propertyCode: string) => void;
   handleOpenFieldApp: () => void;
   maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>;
+  // Task 2: Callback para expansão dinâmica do range de dados
+  onCalendarVisibleRangeChange?: (startDate: Date, days: number, isFullscreen: boolean) => void;
 }
 
 export function ModuleRouter({
@@ -119,6 +121,7 @@ export function ModuleRouter({
   handleActivateTablet,
   handleOpenFieldApp,
   maintenanceOverrides,
+  onCalendarVisibleRangeChange,
 }: ModuleRouterProps) {
 
   if (viewMode === 'stats') {
@@ -349,6 +352,7 @@ export function ModuleRouter({
               console.warn('Reserva não encontrada:', calendarRes.bookingId);
             }
           }}
+          onVisibleRangeChange={onCalendarVisibleRangeChange}
         />
       </Suspense>
     );
@@ -383,6 +387,7 @@ export function ModuleRouter({
           columns={boardColumns}
           cards={boardCards}
           users={users}
+          currentUser={currentUser}
           onBack={() => setSelectedBoard(null)}
           onAddColumn={(title) => {
             storageService.boardColumns.add({
@@ -394,6 +399,10 @@ export function ModuleRouter({
           }}
           onUpdateColumn={(col) => storageService.boardColumns.update(col)}
           onDeleteColumn={(id) => storageService.boardColumns.delete(id)}
+          onReorderColumns={(cols) => {
+            // Task 3: Persistir reordenação de colunas
+            cols.forEach(col => storageService.boardColumns.update(col));
+          }}
           onAddCard={(card) => storageService.boardCards.add(card)}
           onUpdateCard={(card) => storageService.boardCards.update(card)}
           onDeleteCard={(id) => storageService.boardCards.delete(id)}

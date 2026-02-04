@@ -70,7 +70,7 @@ export function AuthProvider({ children, users, onUserChange }: AuthProviderProp
   const getPrimaryModuleForRole = useCallback((role: User['role']): AppModule => {
     switch(role) {
       case 'Maintenance':
-      case 'Faxineira':
+      case 'Limpeza':
         return 'maintenance';
       case 'Guest Relations':
         return 'guest';

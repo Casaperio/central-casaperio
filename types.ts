@@ -121,7 +121,10 @@ export interface Ticket {
   completedDate?: string;
   guestAuth: boolean;
   status: TicketStatus;
+  // Mantém retrocompatibilidade
   assignee?: string;
+  // Task 1: Suporte para múltiplos responsáveis (máximo 2)
+  assignees?: string[];
   createdBy?: string;
   createdByName?: string;
   createdAt: number;
@@ -220,7 +223,8 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'Guest Relations' | 'Maintenance' | 'Admin' | 'Faxineira' | 'Administrativo';
+  // Roles do sistema (Faxineira removida)
+  role: 'Guest Relations' | 'Maintenance' | 'Admin' | 'Administrativo' | 'Limpeza';
   avatar?: string;
   notificationPreferences?: { newTicket: boolean; assignment: boolean };
   allowedModules?: AppModule[];

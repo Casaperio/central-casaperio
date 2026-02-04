@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { Ticket, TicketStatus } from '../types';
-import { X, Calendar, User, Clock, CheckCircle2, AlertTriangle, FileText, Shield, DollarSign, Plus, Trash2, ChevronLeft, LogOut, MessageSquare } from 'lucide-react';
+import { Ticket, TicketStatus, User } from '../types';
+import { X, Calendar, User as UserIcon, Clock, CheckCircle2, AlertTriangle, FileText, Shield, DollarSign, Plus, Trash2, ChevronLeft, LogOut, MessageSquare } from 'lucide-react';
 import { generateId } from '../utils';
 
 interface TicketDetailModalProps {
  ticket: Ticket;
  onClose: () => void;
  onUpdateStatus: (id: string, status: TicketStatus, date?: string, startedAt?: number, completionReport?: Ticket['completionReport']) => void;
- onAssign: (id: string, assignee: string, date: string) => void;
+ // Task 1: Alterado para aceitar array de responsáveis
+ onAssign: (id: string, assignees: string[], date: string) => void;
  onAddExpense: (ticketId: string, description: string, amount: number) => void;
  onDeleteExpense: (ticketId: string, expenseId: string) => void;
  onDeleteTicket: (id: string) => void;
@@ -15,7 +16,7 @@ interface TicketDetailModalProps {
  onSaveObservations: (ticketId: string, observationText: string, userName: string) => void;
  onSaveProblemReport: (ticketId: string, text: string, images: string[], userName: string) => void;
  allUsers: { name: string; role: string }[];
- currentUser?: { id: string; name: string };
+ currentUser?: User;
 }
 
 const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateStatus, onAssign, onAddExpense, onDeleteExpense, onDeleteTicket, onDismissCheckoutTicket, onSaveObservations, onSaveProblemReport, allUsers, currentUser }) => {
@@ -29,8 +30,10 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
  });
 
  const [assignMode, setAssignMode] = useState(false);
- const [tempAssignee, setTempAssignee] = useState(ticket.assignee || '');
+ // Task 1: Alterado para array de responsáveis (máximo 2)
+ const [tempAssignees, setTempAssignees] = useState<string[]>(ticket.assignees || (ticket.assignee ? [ticket.assignee] : []));
  const [tempScheduledDate, setTempScheduledDate] = useState(ticket.scheduledDate || '');
+ const [userSearchFilter, setUserSearchFilter] = useState('');
 
  // Expense State
  const [expenseDesc, setExpenseDesc] = useState('');
@@ -60,16 +63,23 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
  };
 
  const handleAssignSubmit = () => {
-  if (tempAssignee && tempScheduledDate) {
-   onAssign(ticket.id, tempAssignee, tempScheduledDate);
+  // Task 1: Valida múltiplos responsáveis (máximo 2)
+  if (tempAssignees.length > 0 && tempScheduledDate) {
+   if (tempAssignees.length > 2) {
+    alert("Máximo de 2 responsáveis técnicos por chamado.");
+    return;
+   }
+   onAssign(ticket.id, tempAssignees, tempScheduledDate);
    setAssignMode(false);
   } else {
-   alert("Selecione um responsável e uma data de realização.");
+   alert("Selecione pelo menos um responsável e uma data de realização.");
   }
  };
 
  const handleStartTicket = () => {
-  if (!ticket.assignee || ticket.assignee === 'Não atribuído') {
+  // Task 1: Valida com múltiplos responsáveis
+  const currentAssignees = ticket.assignees || (ticket.assignee ? [ticket.assignee] : []);
+  if (currentAssignees.length === 0 || currentAssignees[0] === 'Não atribuído') {
    alert("Para iniciar o chamado, é necessário atribuir um responsável técnico primeiro.");
    setAssignMode(true);
    return;
@@ -334,33 +344,84 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
 
       <div className="space-y-4">
        <div className="flex items-start gap-3">
-        <User className="text-brand-500 mt-0.5" size={20} />
+        <UserIcon className="text-brand-500 mt-0.5" size={20} />
         <div className="w-full">
          <div className="flex justify-between items-center mb-1">
           <p className="text-sm font-medium text-gray-900">Responsável Técnico</p>
           {!assignMode && (
            <button onClick={() => setAssignMode(true)} className="text-xs text-brand-600 hover:underline p-1">
-            {ticket.assignee ? 'Alterar' : 'Atribuir'}
+            {(ticket.assignees && ticket.assignees.length > 0) || ticket.assignee ? 'Alterar' : 'Atribuir'}
            </button>
           )}
          </div>
          
          {!assignMode ? (
            <p className="text-sm text-gray-600 p-2 bg-gray-50 rounded border border-gray-100">
-            {ticket.assignee || 'Não atribuído'}
+            {/* Task 1: Exibe múltiplos responsáveis */}
+            {ticket.assignees && ticket.assignees.length > 0 
+              ? ticket.assignees.join(' • ') 
+              : ticket.assignee || 'Não atribuído'}
            </p>
          ) : (
           <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-2">
-            <select 
-            className="w-full p-2.5 bg-white border border-gray-300 rounded-lg text-sm"
-            value={tempAssignee}
-            onChange={(e) => setTempAssignee(e.target.value)}
-           >
-            <option value="">Selecione...</option>
-            {allUsers.map(u => (
-             <option key={u.name} value={u.name}>{u.name} ({u.role})</option>
-            ))}
-           </select>
+            {/* Task 1: Multi-select com máximo de 2 - UI melhorada com scroll e busca */}
+            <div className="space-y-2">
+             <label className="text-xs text-gray-600 font-medium">Selecione até 2 responsáveis:</label>
+             
+             {/* Campo de busca */}
+             <input
+               type="text"
+               placeholder="Buscar usuário..."
+               value={userSearchFilter}
+               onChange={(e) => setUserSearchFilter(e.target.value)}
+               className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+             />
+             
+             <div className="max-h-[240px] overflow-y-auto border border-gray-200 rounded-lg bg-white">
+              {allUsers
+                // Ordenar: Limpeza e Maintenance primeiro
+                .sort((a, b) => {
+                  const aPriority = (a.role === 'Limpeza' || (a.role as any) === 'Faxineira' || a.role === 'Maintenance') ? 0 : 1;
+                  const bPriority = (b.role === 'Limpeza' || (b.role as any) === 'Faxineira' || b.role === 'Maintenance') ? 0 : 1;
+                  if (aPriority !== bPriority) return aPriority - bPriority;
+                  return a.name.localeCompare(b.name);
+                })
+                // Filtrar por nome
+                .filter(u => u.name.toLowerCase().includes(userSearchFilter.toLowerCase()))
+                .map(u => {
+                  // Exibir label amigável para o role
+                  const roleLabel = u.role === 'Maintenance' ? 'Gerente de Manutenção' :
+                                    (u.role as any) === 'Faxineira' ? 'Limpeza' :
+                                    u.role === 'Limpeza' ? 'Limpeza' :
+                                    u.role === 'Guest Relations' ? 'Guest Relations' :
+                                    u.role === 'Administrativo' ? 'Administrativo' :
+                                    u.role === 'Admin' ? 'Admin' : u.role;
+                  
+                  return (
+                    <label key={u.name} className="flex items-center gap-2 p-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0">
+                      <input 
+                        type="checkbox"
+                        checked={tempAssignees.includes(u.name)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            if (tempAssignees.length >= 2) {
+                              alert('Máximo de 2 responsáveis técnicos por chamado');
+                              return;
+                            }
+                            setTempAssignees([...tempAssignees, u.name]);
+                          } else {
+                            setTempAssignees(tempAssignees.filter(a => a !== u.name));
+                          }
+                        }}
+                        className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                      />
+                      <span className="text-sm flex-1">{u.name}</span>
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{roleLabel}</span>
+                    </label>
+                  );
+              })}
+             </div>
+            </div>
            <input 
             type="datetime-local"
             value={tempScheduledDate}
@@ -431,7 +492,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
            {obs.text}
           </p>
           <div className="flex items-center gap-2 text-xs text-gray-500">
-           <User size={12} />
+           <UserIcon size={12} />
            <span className="font-medium">{obs.createdByName || 'Usuário'}</span>
            <span>•</span>
            <Clock size={12} />
@@ -550,7 +611,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
            </div>
           )}
           <div className="flex items-center gap-2 text-xs text-gray-500 pt-2 border-t border-red-300">
-           <User size={12} />
+           <UserIcon size={12} />
            <span className="font-medium">{ticket.problemReport.createdByName || 'Usuário'}</span>
            <span>•</span>
            <Clock size={12} />
@@ -684,13 +745,15 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
       {!showCompletionDate ? (
        <div className="flex flex-col-reverse md:flex-row justify-between items-center gap-3">
         
-        {/* Delete/Dismiss Button */}
-        <button
-          onClick={ticket.isCheckoutTicket && onDismissCheckoutTicket ? handleDismiss : handleDelete}
-          className="text-red-500 hover:text-red-700 text-sm font-medium px-4 py-3 md:py-2 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center gap-2 w-full md:w-auto"
-        >
-          <Trash2 size={18} /> {ticket.isCheckoutTicket && onDismissCheckoutTicket ? 'Dispensar' : 'Excluir'}
-        </button>
+        {/* Delete/Dismiss Button - Task 4: Bloqueado para role Limpeza */}
+        {currentUser?.role !== 'Limpeza' && (
+          <button
+            onClick={ticket.isCheckoutTicket && onDismissCheckoutTicket ? handleDismiss : handleDelete}
+            className="text-red-500 hover:text-red-700 text-sm font-medium px-4 py-3 md:py-2 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center gap-2 w-full md:w-auto"
+          >
+            <Trash2 size={18} /> {ticket.isCheckoutTicket && onDismissCheckoutTicket ? 'Dispensar' : 'Excluir'}
+          </button>
+        )}
 
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto justify-end">
          {ticket.status !== TicketStatus.DONE && (

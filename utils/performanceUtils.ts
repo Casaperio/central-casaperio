@@ -97,10 +97,15 @@ export function getDefaultPeriodForRoute(route: string, mode?: 'normal' | 'canva
 
   // Canvas sempre 6 meses a partir de hoje
   if (mode === 'canvas') {
+    // Task 2: Canvas com range expandido - 3 meses para trás, 9 meses para frente
+    const startDate = new Date(today);
+    startDate.setDate(startDate.getDate() - 90); // 3 meses antes
+    
     const endDate = new Date(today);
-    endDate.setDate(endDate.getDate() + 180);
+    endDate.setDate(endDate.getDate() + 270); // 9 meses depois
+    
     return {
-      from: formatDate(today),
+      from: formatDate(startDate),
       to: formatDate(endDate),
     };
   }
