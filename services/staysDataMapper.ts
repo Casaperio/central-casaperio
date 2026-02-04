@@ -12,6 +12,8 @@ import {
   CalendarResponse,
   DashboardResponse,
 } from './staysApiService';
+import { extractGuestContact } from '../utils/guestContactExtractors';
+import { debugLog } from '../utils/debugLog';
 
 // Daily status type used internally
 export type DailyStatus = 'CHECKIN' | 'CHECKOUT' | 'INHOUSE' | 'FUTURE' | 'PAST';
@@ -62,6 +64,20 @@ function formatDateStr(date: Date): string {
  * Maps dashboard GuestData to Reservation
  */
 export function mapGuestToReservation(guest: GuestData): ReservationWithDailyStatus {
+  // Task 6: Extração robusta de email e telefone
+  const contactInfo = extractGuestContact(guest);
+  
+  // Task 6 Debug: Log dados de contato da API
+  if (contactInfo.email || contactInfo.phone) {
+    console.log('📞 [MAPPER-DASHBOARD] Contato extraído:', {
+      guestName: guest.guestName,
+      email: contactInfo.email,
+      phone: contactInfo.phone,
+      rawHadEmail: !!guest.guestEmail,
+      rawHadPhone: !!guest.guestPhone
+    });
+  }
+
   return {
     id: `stays-${guest.id}`,
     externalId: guest.bookingId,
@@ -70,6 +86,8 @@ export function mapGuestToReservation(guest: GuestData): ReservationWithDailySta
     propertyCode: guest.apartmentCode,
     propertyName: undefined,
     guestName: guest.guestName,
+    guestEmail: contactInfo.email, // Task 6: Usando extrator robusto
+    guestPhone: contactInfo.phone, // Task 6: Usando extrator robusto
     language: undefined,
     checkInDate: guest.checkInDate,
     checkOutDate: guest.checkOutDate,
@@ -111,6 +129,20 @@ export function mapCalendarReservationToReservation(
   calRes: CalendarReservation,
   unitCode: string
 ): ReservationWithDailyStatus {
+  // Task 6: Extração robusta de email e telefone
+  const contactInfo = extractGuestContact(calRes);
+  
+  // Task 6 Debug: Log dados de contato da API
+  if (contactInfo.email || contactInfo.phone) {
+    console.log('📞 [MAPPER-CALENDAR] Contato extraído:', {
+      guestName: calRes.guestName,
+      email: contactInfo.email,
+      phone: contactInfo.phone,
+      rawHadEmail: !!calRes.guestEmail,
+      rawHadPhone: !!calRes.guestPhone
+    });
+  }
+
   return {
     id: `stays-${calRes.id}`,
     externalId: calRes.bookingId,
@@ -119,6 +151,8 @@ export function mapCalendarReservationToReservation(
     propertyCode: unitCode,
     propertyName: undefined,
     guestName: calRes.guestName,
+    guestEmail: contactInfo.email, // Task 6: Usando extrator robusto
+    guestPhone: contactInfo.phone, // Task 6: Usando extrator robusto
     language: undefined,
     checkInDate: calRes.startDate,
     checkOutDate: calRes.endDate,

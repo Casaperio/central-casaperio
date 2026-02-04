@@ -68,6 +68,8 @@ export interface GuestData {
   id: string;
   bookingId: string;
   guestName: string;
+  guestEmail: string | null; // Task 6
+  guestPhone: string | null; // Task 6
   apartmentCode: string;
   status: 'checkin' | 'checkout' | 'staying';
   checkInDate: string;

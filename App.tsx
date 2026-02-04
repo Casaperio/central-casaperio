@@ -394,6 +394,7 @@ function AppContent() {
     isFetching: staysRefetching,
     error: staysError,
     refresh: refreshStaysData,
+    guestContactMap, // Task 6: Export guest contact map
   } = useStaysData(staysDataPeriod);
 
   // 🚀 PREFETCH INTELIGENTE: pré-carregar próximo módulo provável
@@ -1057,6 +1058,7 @@ function AppContent() {
              handleOpenFieldApp={handleOpenFieldApp}
              maintenanceOverrides={maintenanceOverrides}
              onCalendarVisibleRangeChange={handleCalendarVisibleRangeChange}
+             guestContactMap={guestContactMap}
            />
 
         </main>

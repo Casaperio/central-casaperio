@@ -83,6 +83,16 @@ export interface GuestNote {
   updatedBy: string; // Nome do usuário que atualizou
 }
 
+// Task 6: Dados de contato complementares do hóspede
+export interface GuestContactData {
+  id: string;
+  guestKey: string; // Nome normalizado usado como chave
+  guestName: string; // Nome original do hóspede
+  extraPhones: string[]; // Telefones adicionais (além do phone base)
+  updatedAt: number;
+  updatedBy: string; // Nome do usuário que atualizou
+}
+
 export interface ReservationOverrides {
   id: string; // reservationId ou externalId
   reservationId?: string; // ID da reserva (preferencial)
@@ -187,6 +197,8 @@ export interface Reservation {
   propertyCode: string;
   propertyName?: string;
   guestName: string;
+  guestEmail?: string; // Task 6: Email do hóspede (fonte base)
+  guestPhone?: string; // Task 6: Telefone do hóspede (fonte base)
   language?: string;
   checkInDate: string;
   checkOutDate: string;

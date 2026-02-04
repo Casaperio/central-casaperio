@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Reservation, ReservationStatus, User, FlightData, Ticket } from '../types';
-import { X, Calendar, User as UserIcon, ChevronLeft, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby, Repeat, MessageSquare } from 'lucide-react';
+import { X, Calendar, User as UserIcon, ChevronLeft, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby, Repeat, MessageSquare, Phone, Mail } from 'lucide-react';
 import { checkFlightStatus } from '../services/geminiService';
 import { storageService } from '../services/storage';
 import { getReservationOverrideKey, formatDatePtBR } from '../utils';
+import { formatPhoneSmart, applyPhoneMaskBR } from '../utils/phoneFormatter'; // Task 6: Phone formatter
+import { debugLog } from '../utils/debugLog'; // Task 6: Debug system
+import { normalizeGuestKey } from '../utils/normalizeGuestKey';
 
 import { isAutomaticCheckoutTicket } from '../utils/ticketFilters';
 
 interface ReservationDetailModalProps {
  reservation: Reservation;
  currentUser: User;
+ guestContactMap?: Record<string, { email?: string; phone?: string }>; // Task 6: Mapa de contatos do Calendar
  tickets?: Ticket[]; // Added to show linked tickets
  staysReservations?: Reservation[]; // Para calcular histórico do hóspede
  onCreateTicket: () => void;
@@ -34,9 +38,29 @@ const normalizeGuestName = (name: string): string => {
 
 const LANGUAGES = ['Português (Brasil)', 'Inglês', 'Espanhol', 'Francês', 'Alemão', 'Outro'];
 
-const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reservation, currentUser, tickets = [], staysReservations = [], onCreateTicket, onClose, onUpdateDetails, onDelete, onDismissCheckout, onAddExpense, onDeleteExpense }) => {
+const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reservation, currentUser, guestContactMap = {}, tickets = [], staysReservations = [], onCreateTicket, onClose, onUpdateDetails, onDelete, onDismissCheckout, onAddExpense, onDeleteExpense }) => {
 
  const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
+ 
+ // Task 6: Resolver email e telefone com fallback usando guestContactMap
+ const normalizedKey = normalizeGuestKey(reservation.guestName);
+ const contactFromMap = guestContactMap[normalizedKey];
+ 
+ const displayEmail = reservation.guestEmail ?? contactFromMap?.email;
+ const displayPhone = reservation.guestPhone ?? contactFromMap?.phone;
+ 
+ // Task 6: Log inicial do guestContactMap recebido
+ console.log('📧 [MODAL] Dados de contato:', {
+   guestName: reservation.guestName,
+   normalizedKey,
+   guestContactMapSize: Object.keys(guestContactMap).length,
+   hasDataForThisGuest: !!contactFromMap,
+   contactInfo: contactFromMap,
+   displayEmail,
+   displayPhone,
+   reservationEmail: reservation.guestEmail,
+   reservationPhone: reservation.guestPhone
+ });
 
  // Calcula quantas reservas este hóspede já fez
  const guestReservationCount = useMemo(() => {
@@ -94,6 +118,13 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  const [loadingNote, setLoadingNote] = useState(true);
  const [savingNote, setSavingNote] = useState(false);
  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+ // Task 6: Guest Contact Data State
+ const [extraPhones, setExtraPhones] = useState<string[]>([]);
+ const [newPhone, setNewPhone] = useState('');
+ const [loadingContactData, setLoadingContactData] = useState(true);
+ const [savingContactData, setSavingContactData] = useState(false);
+ const contactDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
  // Reservation Overrides State
  const [loadingOverrides, setLoadingOverrides] = useState(true);
@@ -167,6 +198,39 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
    loadGuestNote();
  }, [reservation.guestName]);
 
+ // Task 6: Carrega os dados de contato do hóspede do Firestore
+ useEffect(() => {
+   const loadContactData = async () => {
+     const guestKey = normalizeGuestName(reservation.guestName);
+     
+     // Debug: Log dos dados base da reserva
+     debugLog.modal('Dados de contato da reserva:', {
+       guestName: reservation.guestName,
+       guestEmail: displayEmail,
+       guestPhone: displayPhone,
+       source: reservation.source,
+       channel: reservation.channel,
+       externalId: reservation.externalId
+     });
+
+     try {
+       const contactData = await storageService.guestContactData.get(guestKey);
+       if (contactData && contactData.extraPhones) {
+         setExtraPhones(contactData.extraPhones);
+         debugLog.modal('Telefones extras carregados:', contactData.extraPhones);
+       } else {
+         debugLog.modal('Nenhum telefone extra encontrado para:', guestKey);
+       }
+     } catch (error) {
+       console.error('[Task 6 Error] Erro ao carregar dados de contato:', error);
+     } finally {
+       setLoadingContactData(false);
+     }
+   };
+
+   loadContactData();
+ }, [reservation.guestName, displayEmail, displayPhone, reservation.source, reservation.channel]);
+
  // Carrega os overrides da reserva do Firestore
  useEffect(() => {
    const loadOverrides = async () => {
@@ -228,14 +292,14 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
 
  // Seta o baseline inicial após carregar overrides (para comparação de dirty state)
  useEffect(() => {
-   if (!isInitializing && !loadingOverrides && !loadingNote && !baselineSetRef.current) {
+   if (!isInitializing && !loadingOverrides && !loadingNote && !loadingContactData && !baselineSetRef.current) {
      // Quando terminar de carregar overrides e notas, seta o baseline APENAS UMA VEZ
      const initialEditable = JSON.stringify(getEditableFields());
      initialEditableRef.current = initialEditable;
      baselineSetRef.current = true; // Marca que baseline foi setado
      setHasChanges(false);
    }
- }, [isInitializing, loadingOverrides, loadingNote]);
+ }, [isInitializing, loadingOverrides, loadingNote, loadingContactData]);
 
  // Recalcula hasChanges quando qualquer campo editável mudar
  useEffect(() => {
@@ -286,6 +350,80 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
    return () => {
      if (debounceTimerRef.current) {
        clearTimeout(debounceTimerRef.current);
+     }
+   };
+ }, []);
+
+ // Task 6: Salva os dados de contato no Firestore com debounce
+ const saveContactData = useCallback(async (phones: string[]) => {
+   const guestKey = normalizeGuestName(reservation.guestName);
+   setSavingContactData(true);
+
+   try {
+     await storageService.guestContactData.set({
+       guestKey,
+       guestName: reservation.guestName,
+       extraPhones: phones,
+       updatedAt: Date.now(),
+       updatedBy: currentUser.name
+     });
+   } catch (error) {
+     console.error('Erro ao salvar dados de contato:', error);
+   } finally {
+     setSavingContactData(false);
+   }
+ }, [reservation.guestName, currentUser.name]);
+
+ // Task 6: Handler para adicionar telefone extra
+ const handleAddPhone = useCallback(() => {
+   const cleaned = newPhone.trim();
+   if (!cleaned) return;
+
+   // Validação básica: mínimo 8 dígitos
+   const digitsOnly = cleaned.replace(/\D/g, '');
+   if (digitsOnly.length < 8) {
+     alert('Telefone inválido. Mínimo 8 dígitos.');
+     return;
+   }
+
+   // Evitar duplicatas
+   if (extraPhones.includes(cleaned)) {
+     alert('Este telefone já está na lista.');
+     return;
+   }
+
+   const updated = [...extraPhones, cleaned];
+   setExtraPhones(updated);
+   setNewPhone('');
+
+   // Salvar com debounce
+   if (contactDebounceTimerRef.current) {
+     clearTimeout(contactDebounceTimerRef.current);
+   }
+   contactDebounceTimerRef.current = setTimeout(() => {
+     saveContactData(updated);
+   }, 500);
+ }, [newPhone, extraPhones, saveContactData]);
+
+ // Task 6: Handler para remover telefone extra
+ const handleRemovePhone = useCallback((phone: string) => {
+   const updated = extraPhones.filter(p => p !== phone);
+   setExtraPhones(updated);
+
+   // Salvar com debounce
+   if (contactDebounceTimerRef.current) {
+     clearTimeout(contactDebounceTimerRef.current);
+   }
+   contactDebounceTimerRef.current = setTimeout(() => {
+     saveContactData(updated);
+   }, 500);
+ }, [extraPhones, saveContactData]);
+
+ // Cleanup do contact debounce timer
+ useEffect(() => {
+   return () => {
+     if (contactDebounceTimerRef.current) {
+       clearTimeout(contactDebounceTimerRef.current);
      }
    };
  }, []);
@@ -618,6 +756,103 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
               </div>
              </div>
           </div>
+        </div>
+
+        {/* Task 6: Guest Contact Data */}
+        <div className="bg-purple-50 rounded-none p-5 border border-purple-100">
+          <div className="flex items-center gap-2 mb-4">
+            <Phone size={18} className="text-purple-700" />
+            <h3 className="text-sm font-bold text-purple-900 uppercase tracking-wide">Contato do Hóspede</h3>
+            {savingContactData && <span className="text-xs text-purple-600 ml-auto">Salvando...</span>}
+            {!savingContactData && extraPhones.length > 0 && <span className="text-xs text-green-600 ml-auto">✓ Salvo</span>}
+          </div>
+
+          {loadingContactData ? (
+            <div className="space-y-2">
+              <div className="animate-pulse bg-purple-100 h-10 rounded"></div>
+              <div className="animate-pulse bg-purple-100 h-10 rounded"></div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Email & Phone Base (fonte externa) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-white p-3 rounded border border-purple-200">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Mail size={14} className="text-gray-500" />
+                    <span className="text-xs font-semibold text-gray-600 uppercase">Email</span>
+                  </div>
+                  <p className="text-sm text-gray-900 break-all">
+                    {displayEmail || <span className="text-gray-400 italic">Não informado</span>}
+                  </p>
+                </div>
+
+                <div className="bg-white p-3 rounded border border-purple-200">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Phone size={14} className="text-gray-500" />
+                    <span className="text-xs font-semibold text-gray-600 uppercase">Telefone Principal</span>
+                  </div>
+                  <p className="text-sm text-gray-900">
+                    {displayPhone ? formatPhoneSmart(displayPhone) : <span className="text-gray-400 italic">Não informado</span>}
+                  </p>
+                </div>
+              </div>
+
+              {/* Telefones Extras */}
+              <div className="bg-white p-3 rounded border border-purple-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-purple-800 uppercase">Telefones Adicionais</span>
+                  <span className="text-xs text-gray-500">{extraPhones.length} cadastrado{extraPhones.length !== 1 ? 's' : ''}</span>
+                </div>
+
+                {/* Lista de telefones extras */}
+                {extraPhones.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {extraPhones.map((phone, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-purple-50 p-2 rounded">
+                        <span className="text-sm text-gray-900">{formatPhoneSmart(phone)}</span>
+                        <button
+                          onClick={() => handleRemovePhone(phone)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                          title="Remover telefone"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Form para adicionar novo telefone */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(applyPhoneMaskBR(e.target.value))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddPhone();
+                      }
+                    }}
+                    className="flex-1 text-sm p-2 rounded border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="(11) 98765-4321"
+                    maxLength={15}
+                  />
+                  <button
+                    onClick={handleAddPhone}
+                    className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition-colors flex items-center gap-1"
+                  >
+                    <Plus size={16} />
+                    <span className="text-sm font-medium">Adicionar</span>
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-xs text-purple-700">
+                💡 Nota: Telefones adicionais são compartilhados entre todas as reservas deste hóspede.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Guest Notes */}

@@ -2,7 +2,7 @@ import { db, storage } from './firebase';
 import { BoardCardAttachment } from '../types';
 import {
   Ticket, UserWithPassword, LogEntry, Property, Reservation,
-  GuestTip, GuestFeedback, GuestNote, ReservationOverrides, MonitoredFlight, InventoryItem,
+  GuestTip, GuestFeedback, GuestNote, GuestContactData, ReservationOverrides, MonitoredFlight, InventoryItem,
   InventoryTransaction, Delivery, OfficeSupply, CompanyAsset, WorkShift,
   ConciergeOffer, Supplier, ServiceTypeDefinition,
   Board, BoardColumn, BoardCard, AfterHoursConfig, ChatMessage, CallSession, AppModule
@@ -21,6 +21,7 @@ const COLLECTIONS = {
   TIPS: 'tips',
   FEEDBACKS: 'feedbacks',
   GUEST_NOTES: 'guest_notes',
+  GUEST_CONTACT_DATA: 'guest_contact_data', // Task 6: Telefones extras do hóspede
   RESERVATION_OVERRIDES: 'reservation_overrides',
   MONITORED_FLIGHTS: 'monitoredFlights',
   INVENTORY_ITEMS: 'inventory_items',
@@ -295,6 +296,29 @@ export const storageService = {
       const { guestKey, ...data } = guestNote;
       const docId = sanitizeDocId(guestKey);
       await db.collection(COLLECTIONS.GUEST_NOTES).doc(docId).set(cleanData({
+        guestKey,
+        ...data
+      }), { merge: true });
+    }
+  },
+
+  // --- GUEST CONTACT DATA (Task 6) ---
+  guestContactData: {
+    get: async (guestKey: string): Promise<GuestContactData | null> => {
+      ensureDb();
+      const docRef = db.collection(COLLECTIONS.GUEST_CONTACT_DATA).doc(sanitizeDocId(guestKey));
+      const doc = await docRef.get();
+      if (doc.exists) {
+        return { id: doc.id, ...doc.data() } as GuestContactData;
+      }
+      return null;
+    },
+
+    set: async (contactData: Omit<GuestContactData, 'id'>): Promise<void> => {
+      ensureDb();
+      const { guestKey, ...data } = contactData;
+      const docId = sanitizeDocId(guestKey);
+      await db.collection(COLLECTIONS.GUEST_CONTACT_DATA).doc(docId).set(cleanData({
         guestKey,
         ...data
       }), { merge: true });

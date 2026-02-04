@@ -28,6 +28,8 @@ import {
   generateDataFingerprint,
   AUTO_REFRESH_CONFIG,
 } from '../utils/refetchPolicy';
+import { debugLog } from '../utils/debugLog';
+import { normalizeGuestKey } from '../utils/normalizeGuestKey';
 
 interface UseStaysDataReturn {
   // Raw API data
@@ -38,6 +40,9 @@ interface UseStaysDataReturn {
   // Transformed data ready to use
   agendaGroups: AgendaGroup[];
   reservations: ReservationWithDailyStatus[];
+  
+  // Task 6: Guest contact map for fallback lookup
+  guestContactMap: Record<string, GuestContactInfo>;
 
   // State
   loading: boolean;
@@ -52,6 +57,13 @@ interface UseStaysDataReturn {
 
   // Performance info
   meta: UnifiedResponse['meta'] | null;
+}
+
+// Task 6: Guest contact info type
+export interface GuestContactInfo {
+  name: string;
+  email?: string;
+  phone?: string;
 }
 
 // Cache configuration
@@ -227,6 +239,58 @@ export function useStaysData(options: UseStaysDataOptions): UseStaysDataReturn {
     }
     return result;
   }, [data?.calendar]);
+  
+  // Task 6: Build guest contact map from all reservations
+  const guestContactMap = useMemo<Record<string, GuestContactInfo>>(() => {
+    const map: Record<string, GuestContactInfo> = {};
+    
+    // Combinar dados de agendaGroups e reservations
+    const allReservations: ReservationWithDailyStatus[] = [
+      ...reservations,
+      ...agendaGroups.flatMap(g => g.items),
+    ];
+    
+    // Agregar contatos de todas as reservas
+    for (const res of allReservations) {
+      if (!res.guestName) continue;
+      
+      const key = normalizeGuestKey(res.guestName);
+      if (!key) continue;
+      const existing = map[key];
+      
+      // Estratégia de merge: manter primeiro valor válido encontrado
+      if (!existing) {
+        map[key] = {
+          name: res.guestName,
+          email: res.guestEmail || undefined,
+          phone: res.guestPhone || undefined,
+        };
+      } else {
+        // Preencher campos vazios com novos valores se disponíveis
+        if (!existing.email && res.guestEmail) {
+          existing.email = res.guestEmail;
+        }
+        if (!existing.phone && res.guestPhone) {
+          existing.phone = res.guestPhone;
+        }
+      }
+    }
+    
+    // Task 6 Debug: Log tamanho do mapa
+    const mapSize = Object.keys(map).length;
+    debugLog.hook('guestContactMap criado:', { size: mapSize });
+    if (mapSize > 0) {
+      const values = Object.values(map);
+      const withEmail = values.filter(c => c.email).length;
+      const withPhone = values.filter(c => c.phone).length;
+      const first5 = Object.entries(map).slice(0, 5);
+      debugLog.hook('Estatísticas guestContactMap:', { withEmail, withPhone, first5 });
+    } else {
+      debugLog.hook('guestContactMap vazio: nenhum contato encontrado');
+    }
+    
+    return map;
+  }, [reservations, agendaGroups]);
 
   // Convert sync info to SyncStatus type for backward compatibility
   const syncStatus = useMemo<SyncStatus | null>(() => {
@@ -255,6 +319,7 @@ export function useStaysData(options: UseStaysDataOptions): UseStaysDataReturn {
     // Transformed data
     agendaGroups,
     reservations,
+    guestContactMap, // Task 6: Export contact map
 
     // State
     loading: isLoading,

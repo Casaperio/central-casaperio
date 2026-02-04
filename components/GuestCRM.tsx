@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Reservation, Ticket, GuestFeedback, ReservationStatus } from '../types';
 import {
@@ -13,6 +13,8 @@ import { getDetailedFinancials, getCalendar } from '../services/staysApiService'
 import { storageService } from '../services/storage';
 import { isAutomaticCheckoutTicket } from '../utils/ticketFilters';
 import ReservationDetailModal from './ReservationDetailModal';
+import { debugLog } from '../utils/debugLog'; // Task 6: Debug system
+import { normalizeGuestKey } from '../utils/normalizeGuestKey';
 
 interface GuestCRMProps {
  reservations: Reservation[];
@@ -20,6 +22,7 @@ interface GuestCRMProps {
  feedbacks: GuestFeedback[];
  currentUser?: { role: string; name: string }; // Add currentUser for role-based visibility
  maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>; // Para filtrar dispensados
+ guestContactMap?: Record<string, { email?: string; phone?: string }>; // Task 6: Mapa de contatos vindo do useStaysData
 }
 
 interface ConsolidatedGuest {
@@ -70,7 +73,7 @@ const formatPhoneBR = (phone: string): string => {
   return phone;
 };
 
-const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, currentUser = { role: '', name: '' }, maintenanceOverrides = {} }) => {
+const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, currentUser = { role: '', name: '' }, maintenanceOverrides = {}, guestContactMap: externalGuestContactMap }) => {
  const queryClient = useQueryClient();
  const [searchTerm, setSearchTerm] = useState('');
  const [selectedGuestName, setSelectedGuestName] = useState<string | null>(null);
@@ -153,25 +156,40 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
   return map;
  }, [financialData]);
 
- // Create map of guestName -> {email, phone} for contact info
+ // Task 6: Usar mapa externo se fornecido, caso contrário construir localmente (backward compatibility)
  const guestContactMap = useMemo(() => {
+  // Se recebeu mapa externo, usar ele
+  if (externalGuestContactMap && Object.keys(externalGuestContactMap).length > 0) {
+    debugLog.crm('Usando guestContactMap externo:', Object.keys(externalGuestContactMap).length + ' contatos');
+    return externalGuestContactMap;
+  }
+  
+  // Fallback: construir localmente a partir do calendarData (legacy)
+  debugLog.crm('Construindo guestContactMap localmente (legacy fallback)');
   const map: Record<string, { email?: string; phone?: string }> = {};
   if (calendarData?.units) {
     calendarData.units.forEach(unit => {
       unit.reservations.forEach(res => {
         const name = res.guestName.trim();
+        const key = normalizeGuestKey(name);
+        if (!key) return;
         // Só adiciona se ainda não existe ou se tem mais informação
-        if (!map[name] || (res.guestEmail && !map[name].email) || (res.guestPhone && !map[name].phone)) {
-          map[name] = {
-            email: res.guestEmail || map[name]?.email,
-            phone: res.guestPhone || map[name]?.phone,
+        if (!map[key] || (res.guestEmail && !map[key].email) || (res.guestPhone && !map[key].phone)) {
+          map[key] = {
+            email: res.guestEmail || map[key]?.email,
+            phone: res.guestPhone || map[key]?.phone,
           };
         }
       });
     });
   }
   return map;
- }, [calendarData]);
+ }, [externalGuestContactMap, calendarData]);
+
+ const getContactInfo = useCallback((name: string) => {
+  const key = normalizeGuestKey(name);
+  return (key && guestContactMap[key]) || {};
+ }, [guestContactMap]);
 
  // --- DATA PROCESSING CORE ---
  const guests = useMemo(() => {
@@ -186,7 +204,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
 
    if (!guestMap[name]) {
     // Buscar email/phone do mapa de contatos da API
-    const contactInfo = guestContactMap[name] || {};
+    const contactInfo = getContactInfo(name);
 
     guestMap[name] = {
      name,
@@ -294,7 +312,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
   });
 
   return result;
- }, [filteredReservations, tickets, feedbacks, financialMap, guestContactMap]);
+ }, [filteredReservations, tickets, feedbacks, financialMap, guestContactMap, getContactInfo]);
 
  const filteredGuests = useMemo(() => {
   // 1. Search Filter
@@ -662,7 +680,31 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
                     return (
                       <div 
                         key={res.id} 
-                        onClick={() => setSelectedReservation(res)}
+                        onClick={() => {
+                          // Task 6: Enriquecer reserva com email/phone do calendar antes de abrir modal
+                          const contactInfo = getContactInfo(res.guestName);
+                          
+                          // Debug: Log do que está disponível no momento do clique
+                          debugLog.crm('Tentando enriquecer:', {
+                            guestName: res.guestName,
+                            contactInfoDisponivel: contactInfo,
+                            resJaTem: { email: res.guestEmail, phone: res.guestPhone },
+                            guestContactMapSize: Object.keys(guestContactMap).length
+                          });
+                          
+                          const enrichedReservation = {
+                            ...res,
+                            guestEmail: res.guestEmail || contactInfo.email,
+                            guestPhone: res.guestPhone || contactInfo.phone
+                          };
+                          
+                          debugLog.crm('Reserva enriquecida:', {
+                            email: enrichedReservation.guestEmail,
+                            phone: enrichedReservation.guestPhone
+                          });
+                          
+                          setSelectedReservation(enrichedReservation);
+                        }}
                         className={`p-4 flex flex-col md:flex-row md:items-center justify-between transition-colors cursor-pointer border-l-4 ${colors.bg} ${colors.border} ${colors.bgHover}`}
                       >
                         <div className="flex items-start gap-3 flex-1">
@@ -870,6 +912,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
      <ReservationDetailModal
        reservation={selectedReservation}
        currentUser={currentUser as any}
+       guestContactMap={guestContactMap}
        tickets={tickets.filter(t => t.reservationId === selectedReservation.id || t.propertyCode === selectedReservation.propertyCode)}
        staysReservations={reservations}
        onCreateTicket={() => {}}

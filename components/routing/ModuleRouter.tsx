@@ -85,6 +85,8 @@ interface ModuleRouterProps {
   maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>;
   // Task 2: Callback para expansão dinâmica do range de dados
   onCalendarVisibleRangeChange?: (startDate: Date, days: number, isFullscreen: boolean) => void;
+  // Task 6: Guest contact map from Stays API
+  guestContactMap?: Record<string, { name?: string; email?: string; phone?: string }>;
 }
 
 export function ModuleRouter({
@@ -122,6 +124,7 @@ export function ModuleRouter({
   handleOpenFieldApp,
   maintenanceOverrides,
   onCalendarVisibleRangeChange,
+  guestContactMap,
 }: ModuleRouterProps) {
 
   if (viewMode === 'stats') {
@@ -330,6 +333,7 @@ export function ModuleRouter({
           feedbacks={feedbacks}
           currentUser={currentUser}
           maintenanceOverrides={maintenanceOverrides}
+          guestContactMap={guestContactMap}
         />
       </Suspense>
     );
