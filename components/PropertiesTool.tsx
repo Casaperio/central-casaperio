@@ -13,13 +13,15 @@ interface PropertiesToolProps {
  currentUserRole?: string;
  currentUser?: User;
  onPropertyUpdated?: (updatedProperty: PropertyCharacteristics) => void;
+ isLoading?: boolean;
 }
 
 const PropertiesTool: React.FC<PropertiesToolProps> = ({
  properties,
  currentUserRole,
  currentUser,
- onPropertyUpdated
+ onPropertyUpdated,
+ isLoading = false
 }) => {
  const [searchTerm, setSearchTerm] = useState('');
  const [selectedProperty, setSelectedProperty] = useState<PropertyCharacteristics | null>(null);
@@ -152,11 +154,11 @@ const PropertiesTool: React.FC<PropertiesToolProps> = ({
     </div>
    </div>
 
-   <div className="flex flex-1 p-6 gap-6 overflow-hidden">
+   <div className="flex flex-1 p-3 md:p-6 gap-3 md:gap-6 overflow-hidden">
     
     {/* Sidebar List */}
     <div className="w-full md:w-1/3 lg:w-1/4 bg-white rounded-none shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-     <div className="p-4 border-b border-gray-100 bg-white space-y-3">
+     <div className="p-3 md:p-4 border-b border-gray-100 bg-white space-y-3">
       <div className="relative">
        <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
        <input 
@@ -230,9 +232,23 @@ const PropertiesTool: React.FC<PropertiesToolProps> = ({
      </div>
 
      <div className="flex-1 overflow-y-auto">
-      {filteredProperties.length === 0 ? (
-        <div className="p-8 text-center text-gray-400 text-sm">
-          Nenhum imóvel encontrado.
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+          <Loader2 size={48} className="text-brand-500 animate-spin mb-4" />
+          <p className="text-gray-500 font-medium">Carregando imóveis...</p>
+          <p className="text-xs text-gray-400 mt-1">Buscando dados dos imóveis</p>
+        </div>
+      ) : filteredProperties.length === 0 && properties.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+          <Building2 size={48} className="text-gray-300 mb-4" />
+          <p className="text-gray-500 font-medium">Nenhum imóvel cadastrado</p>
+          <p className="text-xs text-gray-400 mt-1">Os imóveis aparecerão aqui quando forem cadastrados</p>
+        </div>
+      ) : filteredProperties.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+          <Search size={48} className="text-gray-300 mb-4" />
+          <p className="text-gray-500 font-medium">Nenhum resultado encontrado</p>
+          <p className="text-xs text-gray-400 mt-1">Tente ajustar os filtros de busca</p>
         </div>
       ) : (
         filteredProperties.map(p => {
@@ -263,8 +279,8 @@ const PropertiesTool: React.FC<PropertiesToolProps> = ({
      </div>
     </div>
 
-    {/* Details Panel */}
-    <div className="flex-1 bg-white rounded-none shadow-sm border border-gray-200 flex flex-col overflow-hidden">
+    {/* Details Panel - Hidden on mobile, shown on desktop */}
+    <div className="hidden md:flex flex-1 bg-white rounded-none shadow-sm border border-gray-200 flex-col overflow-hidden">
      {selectedProperty ? (
        <div className="flex flex-col h-full">
         {/* View Header */}
@@ -592,6 +608,330 @@ const PropertiesTool: React.FC<PropertiesToolProps> = ({
       </div>
      )}
     </div>
+
+    {/* Mobile Modal - Shown only on mobile when property is selected */}
+    {selectedProperty && (
+     <div className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end">
+      <div className="bg-white w-full h-[90vh] rounded-t-2xl shadow-2xl flex flex-col animate-slide-up">
+       {/* Mobile Header */}
+       <div className="p-4 border-b border-gray-100 bg-white flex items-center justify-between sticky top-0">
+        <button
+         onClick={() => setSelectedProperty(null)}
+         className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+        >
+         <X size={24} />
+         <span className="font-medium">Fechar</span>
+        </button>
+        {isAdmin && !isEditing && (
+         <button
+          onClick={startEditing}
+          className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 rounded transition-colors"
+         >
+          <Pencil size={16} /> Editar
+         </button>
+        )}
+        {isEditing && (
+         <div className="flex items-center gap-2">
+          <button
+           onClick={cancelEditing}
+           disabled={isSaving}
+           className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+          >
+           <X size={14} /> Cancelar
+          </button>
+          <button
+           onClick={saveChanges}
+           disabled={isSaving}
+           className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded transition-colors disabled:opacity-50"
+          >
+           {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+           {isSaving ? 'Salvando...' : 'Salvar'}
+          </button>
+         </div>
+        )}
+       </div>
+
+       {/* Mobile Content - Scrollable */}
+       <div className="flex-1 overflow-y-auto">
+        {/* Property Header */}
+        <div className="p-4 bg-white border-b border-gray-100">
+         <div className="flex items-start gap-3 mb-2">
+          <div className="flex-1">
+           <h2 className="text-2xl font-bold text-gray-900 mb-1">{selectedProperty.internalName}</h2>
+           <p className="text-sm text-gray-600 flex items-center gap-1">
+            <Building2 size={14}/> {selectedProperty.address}
+           </p>
+          </div>
+          {selectedProperty.basicInfo.squareFeet && selectedProperty.basicInfo.squareFeet > 0 && (
+           <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-bold flex-shrink-0">
+            {selectedProperty.basicInfo.squareFeet}m²
+           </span>
+          )}
+         </div>
+         {selectedProperty.location?.latitude && selectedProperty.location?.longitude && (
+          <p className="text-xs text-green-600 flex items-center gap-1">
+           <MapPin size={12}/> {selectedProperty.location.latitude.toFixed(4)}, {selectedProperty.location.longitude.toFixed(4)}
+          </p>
+         )}
+        </div>
+
+        {/* Mobile Cards */}
+        <div className="p-4 space-y-4">
+         
+         {/* Access Card */}
+         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 space-y-3">
+          <h3 className="text-sm font-bold text-brand-600 uppercase tracking-wider flex items-center gap-2">
+           <Key size={16} /> Acesso & Conectividade
+          </h3>
+
+          {editError && (
+           <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+            {editError}
+           </div>
+          )}
+
+          <div className="space-y-3">
+           {/* Wi-Fi Network */}
+           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg group">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+             <div className="bg-white p-2 rounded-full text-gray-400 flex-shrink-0"><Wifi size={16}/></div>
+             <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 font-bold">REDE WI-FI</p>
+              {isEditing ? (
+               <input
+                type="text"
+                value={editWifiNetwork}
+                onChange={(e) => setEditWifiNetwork(e.target.value)}
+                placeholder="Nome da rede"
+                className="w-full mt-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-brand-500"
+               />
+              ) : (
+               <p className="text-sm text-gray-900 font-medium truncate">{selectedProperty.manualOverrides.wifi.network || 'Não cadastrado'}</p>
+              )}
+             </div>
+            </div>
+            {!isEditing && selectedProperty.manualOverrides.wifi.network && (
+             <button onClick={() => copyToClipboard(selectedProperty.manualOverrides.wifi.network || '')} className="text-gray-400 hover:text-brand-600 flex-shrink-0 ml-2"><Copy size={16}/></button>
+            )}
+           </div>
+
+           {/* Wi-Fi Password */}
+           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg group">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+             <div className="bg-white p-2 rounded-full text-gray-400 flex-shrink-0"><Key size={16}/></div>
+             <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 font-bold">SENHA WI-FI</p>
+              {isEditing ? (
+               <input
+                type="text"
+                value={editWifiPassword}
+                onChange={(e) => setEditWifiPassword(e.target.value)}
+                placeholder="Senha da rede"
+                className="w-full mt-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-brand-500 font-mono"
+               />
+              ) : (
+               <p className="text-sm text-gray-900 font-mono font-medium truncate">{selectedProperty.manualOverrides.wifi.password || '---'}</p>
+              )}
+             </div>
+            </div>
+            {!isEditing && selectedProperty.manualOverrides.wifi.password && (
+             <button onClick={() => copyToClipboard(selectedProperty.manualOverrides.wifi.password || '')} className="text-gray-400 hover:text-brand-600 flex-shrink-0 ml-2"><Copy size={16}/></button>
+            )}
+           </div>
+
+           {/* Door Code */}
+           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg group">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+             <div className="bg-white p-2 rounded-full text-gray-400 flex-shrink-0"><Key size={16}/></div>
+             <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 font-bold">FECHADURA DIGITAL</p>
+              {isEditing ? (
+               <input
+                type="text"
+                value={editDoorCode}
+                onChange={(e) => setEditDoorCode(e.target.value)}
+                placeholder="Código da fechadura"
+                className="w-full mt-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-brand-500 font-mono tracking-widest"
+               />
+              ) : (
+               <p className="text-sm text-gray-900 font-mono font-medium tracking-widest">{selectedProperty.manualOverrides.access.doorCode || '---'}</p>
+              )}
+             </div>
+            </div>
+            {!isEditing && selectedProperty.manualOverrides.access.doorCode && (
+             <button onClick={() => copyToClipboard(selectedProperty.manualOverrides.access.doorCode || '')} className="text-gray-400 hover:text-brand-600 flex-shrink-0 ml-2"><Copy size={16}/></button>
+            )}
+           </div>
+
+           {/* Concierge Hours */}
+           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+             <div className="bg-white p-2 rounded-full text-gray-400 flex-shrink-0"><Clock size={16}/></div>
+             <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 font-bold">PORTARIA</p>
+              {isEditing ? (
+               <input
+                type="text"
+                value={editConciergeHours}
+                onChange={(e) => setEditConciergeHours(e.target.value)}
+                placeholder="Ex: 24h ou 06:00 - 22:00"
+                className="w-full mt-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-brand-500"
+               />
+              ) : (
+               <p className="text-sm text-gray-900 font-medium">{selectedProperty.manualOverrides.access.conciergeHours || 'Não informado'}</p>
+              )}
+             </div>
+            </div>
+           </div>
+          </div>
+         </div>
+
+         {/* Basic Info */}
+         {selectedProperty.basicInfo && (
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+           <h3 className="text-sm font-bold text-brand-600 uppercase tracking-wider flex items-center gap-2 mb-4">
+            <Building2 size={16} /> Informações do Imóvel
+           </h3>
+           <div className="grid grid-cols-2 gap-3">
+            <div className="flex items-center gap-2">
+             <div className="bg-brand-50 p-2 rounded-full text-brand-600 flex-shrink-0">
+              <BedDouble size={16} />
+             </div>
+             <div className="min-w-0">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Quartos</p>
+              <p className="text-lg font-bold text-gray-800">{selectedProperty.basicInfo.rooms}</p>
+             </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+             <div className="bg-blue-50 p-2 rounded-full text-blue-600 flex-shrink-0">
+              <Bed size={16} />
+             </div>
+             <div className="min-w-0">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Camas</p>
+              <p className="text-lg font-bold text-gray-800">{selectedProperty.basicInfo.beds}</p>
+             </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+             <div className="bg-purple-50 p-2 rounded-full text-purple-600 flex-shrink-0">
+              <Wind size={16} />
+             </div>
+             <div className="min-w-0">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Banheiros</p>
+              <p className="text-lg font-bold text-gray-800">{selectedProperty.basicInfo.bathrooms}</p>
+             </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+             <div className="bg-green-50 p-2 rounded-full text-green-600 flex-shrink-0">
+              <Users size={16} />
+             </div>
+             <div className="min-w-0">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Capacidade</p>
+              <p className="text-lg font-bold text-gray-800">{selectedProperty.basicInfo.maxGuests}</p>
+             </div>
+            </div>
+           </div>
+          </div>
+         )}
+
+         {/* Specifications */}
+         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-4">
+           <Maximize size={16} /> Especificações
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+           <div className="flex items-center gap-2">
+            <Wind className="text-gray-400 flex-shrink-0" size={16} />
+            <div className="min-w-0">
+             <p className="text-[10px] text-gray-400 uppercase font-bold">Posição</p>
+             <p className="text-xs text-gray-800 truncate">{selectedProperty.manualOverrides.specifications.position || '-'}</p>
+            </div>
+           </div>
+           <div className="flex items-center gap-2">
+            <Eye className="text-gray-400 flex-shrink-0" size={16} />
+            <div className="min-w-0">
+             <p className="text-[10px] text-gray-400 uppercase font-bold">Vista</p>
+             <p className="text-xs text-gray-800 truncate">{selectedProperty.manualOverrides.specifications.viewType || '-'}</p>
+            </div>
+           </div>
+           <div className="flex items-center gap-2 col-span-2">
+            <VolumeX className="text-gray-400 flex-shrink-0" size={16} />
+            <div className="min-w-0">
+             <p className="text-[10px] text-gray-400 uppercase font-bold">Janela Anti-Ruído</p>
+             <p className="text-xs text-gray-800">{selectedProperty.manualOverrides.specifications.hasAntiNoiseWindow ? 'Sim' : 'Não'}</p>
+            </div>
+           </div>
+           <div className="flex items-center gap-2 col-span-2">
+            <DollarSign className="text-gray-400 flex-shrink-0" size={16} />
+            <div className="min-w-0">
+             <p className="text-[10px] text-gray-400 uppercase font-bold">Taxa Limpeza</p>
+             <p className="text-xs text-gray-800">
+              {selectedProperty.manualOverrides.specifications.cleaningFee ? `R$ ${selectedProperty.manualOverrides.specifications.cleaningFee}` : '-'}
+             </p>
+            </div>
+           </div>
+          </div>
+         </div>
+
+         {/* Amenities */}
+         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <h3 className="text-sm font-bold text-green-600 uppercase tracking-wider flex items-center gap-2 mb-3">
+           <Tag size={16} /> Comodidades
+          </h3>
+
+          {selectedProperty.amenities && selectedProperty.amenities.length > 0 ? (
+           <>
+            <p className="text-xs text-gray-500 mb-3">
+             {selectedProperty.amenities.length} comodidades disponíveis
+            </p>
+            <div className="flex flex-wrap gap-2">
+             {selectedProperty.amenities.map((amenity) => (
+              <span key={amenity.staysAmenityId} className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full border border-green-200">
+               {amenity.namePtBr}
+              </span>
+             ))}
+            </div>
+           </>
+          ) : (
+           <p className="text-sm text-gray-400 italic">
+            Nenhuma comodidade cadastrada.
+           </p>
+          )}
+         </div>
+
+         {/* Descriptions */}
+         {selectedProperty.descriptions && Object.keys(selectedProperty.descriptions).length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+           <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider flex items-center gap-2 mb-4">
+            <Building2 size={16} /> Descrição do Imóvel
+           </h3>
+           <div className="space-y-4">
+            {selectedProperty.descriptions['pt_BR'] && (
+             <div>
+              <p className="text-xs font-bold text-gray-500 mb-2">🇧🇷 Português</p>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+               {selectedProperty.descriptions['pt_BR']}
+              </p>
+             </div>
+            )}
+            {selectedProperty.descriptions['en_US'] && (
+             <div className="pt-3 border-t border-gray-100">
+              <p className="text-xs font-bold text-gray-500 mb-2">🇺🇸 English</p>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+               {selectedProperty.descriptions['en_US']}
+              </p>
+             </div>
+            )}
+           </div>
+          </div>
+         )}
+        </div>
+       </div>
+      </div>
+     </div>
+    )}
    </div>
   </div>
  );
