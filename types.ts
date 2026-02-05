@@ -105,6 +105,8 @@ export interface ReservationOverrides {
   // Task 41: Maintenance seen status
   maintenanceSeenBy?: string;
   maintenanceSeenAt?: number;
+  // Task 40: Assigned guest user (responsável)
+  assignedGuestUserId?: string;
   updatedAt: number;
   updatedBy: string;
 }

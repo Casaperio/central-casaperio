@@ -400,12 +400,15 @@ export const storageService = {
         docsSent: overrides.docsSent,
         docsSentToBuilding: overrides.docsSentToBuilding,
         hasChildren: overrides.hasChildren,
-        maintenanceSeenAt: overrides.maintenanceSeenAt
+        maintenanceSeenAt: overrides.maintenanceSeenAt,
+        assignedGuestUserId: overrides.assignedGuestUserId
       });
 
-      await db.collection(COLLECTIONS.RESERVATION_OVERRIDES).doc(docId).set(cleanData({
-        ...overrides
-      }), { merge: true });
+      const dataToSave = cleanData({ ...overrides });
+      console.log('[Storage] Dados após cleanData:', dataToSave);
+      console.log('[Storage] assignedGuestUserId no cleanData:', dataToSave.assignedGuestUserId);
+
+      await db.collection(COLLECTIONS.RESERVATION_OVERRIDES).doc(docId).set(dataToSave, { merge: true });
 
       console.log('[Storage] Override salvo com sucesso no Firestore, docId:', docId);
     }
