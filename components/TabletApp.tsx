@@ -5,7 +5,8 @@ import {
  Home, Wrench, MessageSquare, Star, Plus, X, Info,
  MapPin, Clock, Calendar, CheckCircle2, Tag,
  Wifi, Image as ImageIcon, Check, User, ChevronRight,
- Sun, Cloud, CloudRain, CloudLightning, Wind, CloudDrizzle, CloudSun
+ Sun, Cloud, CloudRain, CloudLightning, Wind, CloudDrizzle, CloudSun,
+ ArrowLeft
 } from 'lucide-react';
 import GuestCommunicator from './GuestCommunicator';
 import TicketForm from './TicketForm';
@@ -132,6 +133,17 @@ const TabletApp: React.FC<TabletAppProps> = ({
    setCustomRequestMode(false);
  };
 
+ // Handler para voltar à home e limpar estados de navegação secundários
+ const handleBackToHome = () => {
+   setActiveTab('home');
+   // Limpar estados de navegação secundários
+   setSelectedOffer(null);
+   setCustomRequestMode(false);
+   setShowTicketModal(false);
+   setShowFeedbackModal(false);
+   setOfferQuantity(1);
+ };
+
  const handleFeedbackSubmit = (e: React.FormEvent) => {
    e.preventDefault();
    onAddFeedback({
@@ -187,9 +199,22 @@ const TabletApp: React.FC<TabletAppProps> = ({
    
    {/* Top Bar */}
    <header className="bg-white px-6 py-4 shadow-sm flex justify-between items-center z-10">
-     <div>
-       <h1 className="text-xl font-bold text-gray-800">Olá, {guestName.split(' ')[0]}</h1>
-       <p className="text-sm text-gray-500">{propertyName}</p>
+     <div className="flex items-center gap-4">
+       {/* Botão Voltar - aparece apenas quando não está na home */}
+       {activeTab !== 'home' && (
+         <button
+           onClick={handleBackToHome}
+           className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] text-brand-600 hover:bg-brand-50 rounded-lg transition-colors active:scale-95 transform touch-manipulation"
+           aria-label="Voltar para início"
+         >
+           <ArrowLeft size={24} className="flex-shrink-0" />
+           <span className="font-medium text-sm hidden sm:inline">Voltar</span>
+         </button>
+       )}
+       <div>
+         <h1 className="text-xl font-bold text-gray-800">Olá, {guestName.split(' ')[0]}</h1>
+         <p className="text-sm text-gray-500">{propertyName}</p>
+       </div>
      </div>
      <div className="flex items-center gap-4">
        {afterHoursConfig?.enabled && (
@@ -667,7 +692,7 @@ const TabletApp: React.FC<TabletAppProps> = ({
 
    {/* Bottom Navigation */}
    <nav className="bg-white border-t border-gray-200 px-6 py-3 flex justify-around items-center z-20 pb-safe">
-     <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 ${activeTab === 'home' ? 'text-brand-600' : 'text-gray-400'}`}>
+     <button onClick={handleBackToHome} className={`flex flex-col items-center gap-1 ${activeTab === 'home' ? 'text-brand-600' : 'text-gray-400'}`}>
        <Home size={24} />
        <span className="text-[10px] font-bold">Início</span>
      </button>
