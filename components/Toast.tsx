@@ -39,8 +39,10 @@ export const Toast: React.FC<ToastProps> = ({ notification, onClose }) => {
   return (
     <div
       className={`
-        fixed top-4 right-4 z-[9999]
-        max-w-md w-full
+        fixed z-[9999]
+        top-4 right-4 left-4
+        sm:top-4 sm:right-4 sm:left-auto
+        sm:max-w-md
         ${bgColor}
         text-white
         rounded-lg shadow-2xl
@@ -50,6 +52,9 @@ export const Toast: React.FC<ToastProps> = ({ notification, onClose }) => {
       `}
       style={{
         animation: isExiting ? 'none' : 'slideInRight 0.3s ease-out',
+        paddingTop: 'max(1rem, env(safe-area-inset-top))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right))',
+        paddingLeft: 'max(1rem, env(safe-area-inset-left))',
       }}
     >
       {/* Header */}
@@ -116,21 +121,23 @@ interface ToastContainerProps {
 
 export const ToastContainer: React.FC<ToastContainerProps> = ({ notifications, onRemove }) => {
   return (
-    <>
-      {notifications.map((notification, index) => (
-        <div
-          key={notification.id}
-          style={{
-            top: `${1 + index * 0.5}rem`, // Empilhar toasts
-            zIndex: 9999 - index,
-          }}
-        >
-          <Toast
-            notification={notification}
-            onClose={() => onRemove(notification.id)}
-          />
-        </div>
-      ))}
-    </>
+    <div className="fixed inset-0 pointer-events-none z-[9999]">
+      <div className="flex flex-col gap-2 sm:gap-3 p-4 sm:items-end">
+        {notifications.map((notification, index) => (
+          <div
+            key={notification.id}
+            className="pointer-events-auto"
+            style={{
+              zIndex: 9999 - index,
+            }}
+          >
+            <Toast
+              notification={notification}
+              onClose={() => onRemove(notification.id)}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 };

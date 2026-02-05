@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Reservation, ReservationStatus, User, FlightData, Ticket } from '../types';
-import { X, Calendar, User as UserIcon, ChevronLeft, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby, Repeat, MessageSquare } from 'lucide-react';
+import { Reservation, ReservationStatus, User, FlightData, Ticket, UserWithPassword } from '../types';
+import { X, Calendar, User as UserIcon, ChevronLeft, ChevronDown, Plane, BedDouble, FileCheck, AlertCircle, Trash2, Save, FileText, DollarSign, Plus, Clock, CheckCircle2, History, Eye, Building2, Flag, RefreshCw, Wrench, Baby, Repeat, MessageSquare, Users } from 'lucide-react';
 import { checkFlightStatus } from '../services/geminiService';
 import { storageService } from '../services/storage';
 import { getReservationOverrideKey, formatDatePtBR } from '../utils';
@@ -77,6 +77,12 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  const [hasChanges, setHasChanges] = useState(false);
  const [showLangSuggestions, setShowLangSuggestions] = useState(false);
 
+ // Task 40: Assigned Guest User (Responsável)
+ const [assignedGuestUserId, setAssignedGuestUserId] = useState<string | undefined>(undefined);
+ const [guestUsers, setGuestUsers] = useState<UserWithPassword[]>([]);
+ const [loadingGuestUsers, setLoadingGuestUsers] = useState(true);
+ const [showAssignedDropdown, setShowAssignedDropdown] = useState(false);
+
  // React Query Client (para invalidar cache dos cards após salvar)
  const queryClient = useQueryClient();
 
@@ -122,11 +128,12 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
      specialAttention,
      problemReported,
      earlyCheckIn: { requested: earlyRequest, time: earlyTime, granted: earlyGranted },
-     lateCheckOut: { requested: lateRequest, time: lateTime, granted: lateGranted }
+     lateCheckOut: { requested: lateRequest, time: lateTime, granted: lateGranted },
+     assignedGuestUserId
    };
  }, [language, docsSent, docsSentToBuilding, hasChildren, wantsBedSplit, flightInfo,
      roomConfig, notes, specialAttention, problemReported, earlyRequest, earlyTime,
-     earlyGranted, lateRequest, lateTime, lateGranted]);
+     earlyGranted, lateRequest, lateTime, lateGranted, assignedGuestUserId]);
 
  // Função helper: verifica se o form tem mudanças comparando com baseline
  const hasFormChanges = useCallback(() => {
@@ -147,6 +154,23 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
    // Task 79: CRÍTICO - Excluir chamados de checkout automático (filtro centralizado)
    !isAutomaticCheckoutTicket(t)
  ).sort((a,b) => b.createdAt - a.createdAt);
+
+ // Task 40: Carrega lista de usuários com role guest OU permissão guest
+ useEffect(() => {
+   const unsubscribe = storageService.users.subscribe((allUsers) => {
+     // Filtra usuários com role 'Guest Relations' OU que têm permissão do módulo 'guest'
+     const filteredUsers = allUsers.filter(u => {
+       const hasGuestRole = u.role === 'Guest Relations';
+       const hasGuestModule = u.allowedModules && u.allowedModules.includes('guest');
+       return hasGuestRole || hasGuestModule;
+     });
+     
+     setGuestUsers(filteredUsers);
+     setLoadingGuestUsers(false);
+   });
+
+   return () => unsubscribe();
+ }, []);
 
  // Carrega a nota do hóspede do Firestore
  useEffect(() => {
@@ -213,6 +237,8 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
          // Task 41: Load maintenance seen status
          if (overrides.maintenanceSeenBy !== undefined) setMaintenanceSeenBy(overrides.maintenanceSeenBy);
          if (overrides.maintenanceSeenAt !== undefined) setMaintenanceSeenAt(overrides.maintenanceSeenAt);
+         // Task 40: Load assigned guest user
+         if (overrides.assignedGuestUserId !== undefined) setAssignedGuestUserId(overrides.assignedGuestUserId);
        }
      } catch (error) {
        console.error('[Modal] Erro ao carregar overrides da reserva:', error);
@@ -244,7 +270,7 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
    setHasChanges(changed);
  }, [language, docsSent, docsSentToBuilding, hasChildren, wantsBedSplit, flightInfo,
      roomConfig, notes, specialAttention, problemReported, earlyRequest, earlyTime,
-     earlyGranted, lateRequest, lateTime, lateGranted, isInitializing, loadingOverrides, loadingNote, hasFormChanges]);
+     earlyGranted, lateRequest, lateTime, lateGranted, assignedGuestUserId, isInitializing, loadingOverrides, loadingNote, hasFormChanges]);
 
  // Salva a nota no Firestore com debounce de 1 segundo
  const saveGuestNote = useCallback(async (noteText: string) => {
@@ -335,7 +361,8 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
        docsSent,
        docsSentToBuilding,
        hasChildren,
-       maintenanceSeenAt
+       maintenanceSeenAt,
+       assignedGuestUserId
      });
 
      await storageService.reservationOverrides.set({
@@ -359,6 +386,8 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
        // Task 41: Save maintenance seen status
        maintenanceSeenBy,
        maintenanceSeenAt,
+       // Task 40: Save assigned guest user
+       assignedGuestUserId,
        updatedAt: Date.now(),
        updatedBy: currentUser.name
      });
@@ -617,6 +646,66 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
                 </label>
               </div>
              </div>
+          </div>
+
+          {/* Task 40: Assigned Guest User (Responsável) */}
+          <div className="mt-4">
+            <label className="text-xs font-semibold text-blue-800 uppercase block mb-1 flex items-center gap-2">
+              <Users size={14} /> Responsável (Opcional)
+            </label>
+            <div className="relative">
+              {loadingGuestUsers ? (
+                <div className="w-full text-sm p-2 rounded border border-blue-200 bg-gray-50 text-gray-400">
+                  Carregando usuários...
+                </div>
+              ) : guestUsers.length === 0 ? (
+                <div className="w-full text-sm p-2 rounded border border-blue-200 bg-gray-50 text-gray-400">
+                  Nenhum responsável disponível
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowAssignedDropdown(!showAssignedDropdown)}
+                    className="w-full text-sm p-2 rounded border border-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-left flex items-center justify-between"
+                  >
+                    <span className={assignedGuestUserId ? 'text-gray-900' : 'text-gray-400'}>
+                      {assignedGuestUserId 
+                        ? guestUsers.find(u => u.id === assignedGuestUserId)?.name || 'Usuário não encontrado'
+                        : 'Selecionar responsável...'}
+                    </span>
+                    <ChevronDown size={16} className={`transform transition-transform ${showAssignedDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showAssignedDropdown && (
+                    <ul className="absolute z-20 w-full bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto mt-1">
+                      {/* Opção para limpar */}
+                      <li 
+                        onClick={() => { 
+                          setAssignedGuestUserId(undefined); 
+                          setShowAssignedDropdown(false); 
+                        }} 
+                        className="p-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 text-gray-500 italic"
+                      >
+                        Sem responsável
+                      </li>
+                      {guestUsers.map(user => (
+                        <li 
+                          key={user.id} 
+                          onClick={() => { 
+                            setAssignedGuestUserId(user.id); 
+                            setShowAssignedDropdown(false); 
+                          }} 
+                          className={`p-2 hover:bg-blue-50 cursor-pointer text-sm flex items-center gap-2 ${assignedGuestUserId === user.id ? 'bg-blue-50 font-semibold' : ''}`}
+                        >
+                          <UserIcon size={14} className="text-blue-600" />
+                          {user.name}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
 

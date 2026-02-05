@@ -799,10 +799,50 @@ function AppContent() {
   // --- KIOSK MODE ---
   if (kioskProperty && isDbConnected) {
       const prop = properties.find(p => p.code === kioskProperty);
-      const activeRes = staysReservations.find(r =>
-        r.propertyCode === kioskProperty &&
-        (r.status === ReservationStatus.CHECKIN || r.status === ReservationStatus.CONFIRMED)
-      ) || null;
+      
+      // Task 4: Buscar reserva IN-HOUSE atual para mostrar nome correto do hóspede
+      // Lógica baseada em DATAS, não em status (status pode estar desatualizado)
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      console.log('[Kiosk] Buscando reserva in-house para:', kioskProperty);
+      console.log('[Kiosk] Data atual:', today.toISOString());
+      
+      // Filtra reservas do imóvel onde hoje está entre check-in e check-out
+      const inHouseReservations = staysReservations
+        .filter(r => {
+          if (r.propertyCode !== kioskProperty) return false;
+          
+          const checkIn = new Date(r.checkInDate);
+          const checkOut = new Date(r.checkOutDate);
+          
+          // Normaliza datas para comparar apenas dia/mês/ano
+          const checkInDay = new Date(checkIn.getFullYear(), checkIn.getMonth(), checkIn.getDate());
+          const checkOutDay = new Date(checkOut.getFullYear(), checkOut.getMonth(), checkOut.getDate());
+          
+          // Reserva está in-house se hoje >= check-in E hoje < check-out
+          // (check-out é o dia de saída, então hóspede não está mais lá nesse dia)
+          const isInHouse = today >= checkInDay && today < checkOutDay;
+          
+          console.log(`[Kiosk] ${r.guestName}: ${r.checkInDate} → ${r.checkOutDate}`, {
+            checkInDay: checkInDay.toISOString(),
+            checkOutDay: checkOutDay.toISOString(),
+            'today >= checkIn': today >= checkInDay,
+            'today < checkOut': today < checkOutDay,
+            isInHouse
+          });
+          
+          return isInHouse;
+        })
+        // Ordena por data de check-in mais recente primeiro (última reserva que entrou)
+        .sort((a, b) => new Date(b.checkInDate).getTime() - new Date(a.checkInDate).getTime());
+      
+      console.log('[Kiosk] Reservas in-house encontradas:', inHouseReservations.map(r => r.guestName));
+      
+      // Pega a primeira reserva in-house encontrada (mais recente)
+      const activeRes = inHouseReservations[0] || null;
+      
+      console.log('[Kiosk] Reserva selecionada:', activeRes?.guestName || 'Nenhuma');
 
       return (
           <TabletApp
