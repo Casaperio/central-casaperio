@@ -801,48 +801,36 @@ function AppContent() {
       const prop = properties.find(p => p.code === kioskProperty);
       
       // Task 4: Buscar reserva IN-HOUSE atual para mostrar nome correto do hóspede
-      // Lógica baseada em DATAS, não em status (status pode estar desatualizado)
+      // Lógica baseada em DATA + HORA (não apenas status), para precisão
       const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
-      console.log('[Kiosk] Buscando reserva in-house para:', kioskProperty);
-      console.log('[Kiosk] Data atual:', today.toISOString());
-      
-      // Filtra reservas do imóvel onde hoje está entre check-in e check-out
+      // Filtra reservas do imóvel onde AGORA está entre check-in e check-out (considerando horários)
       const inHouseReservations = staysReservations
         .filter(r => {
           if (r.propertyCode !== kioskProperty) return false;
           
-          const checkIn = new Date(r.checkInDate);
-          const checkOut = new Date(r.checkOutDate);
+          // Parse check-in: data + hora (ou 15:00 padrão se não houver hora)
+          const checkInTime = r.checkInTime || '15:00';
+          const [checkInHour, checkInMin] = checkInTime.split(':').map(Number);
+          const checkInDateTime = new Date(r.checkInDate + 'T00:00:00.000-03:00'); // Brasília UTC-3
+          checkInDateTime.setHours(checkInHour, checkInMin, 0, 0);
           
-          // Normaliza datas para comparar apenas dia/mês/ano
-          const checkInDay = new Date(checkIn.getFullYear(), checkIn.getMonth(), checkIn.getDate());
-          const checkOutDay = new Date(checkOut.getFullYear(), checkOut.getMonth(), checkOut.getDate());
+          // Parse check-out: data + hora (ou 11:00 padrão se não houver hora)
+          const checkOutTime = r.checkOutTime || '11:00';
+          const [checkOutHour, checkOutMin] = checkOutTime.split(':').map(Number);
+          const checkOutDateTime = new Date(r.checkOutDate + 'T00:00:00.000-03:00'); // Brasília UTC-3
+          checkOutDateTime.setHours(checkOutHour, checkOutMin, 0, 0);
           
-          // Reserva está in-house se hoje >= check-in E hoje < check-out
-          // (check-out é o dia de saída, então hóspede não está mais lá nesse dia)
-          const isInHouse = today >= checkInDay && today < checkOutDay;
-          
-          console.log(`[Kiosk] ${r.guestName}: ${r.checkInDate} → ${r.checkOutDate}`, {
-            checkInDay: checkInDay.toISOString(),
-            checkOutDay: checkOutDay.toISOString(),
-            'today >= checkIn': today >= checkInDay,
-            'today < checkOut': today < checkOutDay,
-            isInHouse
-          });
+          // Reserva está in-house se: agora >= check-in E agora < check-out
+          const isInHouse = now >= checkInDateTime && now < checkOutDateTime;
           
           return isInHouse;
         })
         // Ordena por data de check-in mais recente primeiro (última reserva que entrou)
         .sort((a, b) => new Date(b.checkInDate).getTime() - new Date(a.checkInDate).getTime());
       
-      console.log('[Kiosk] Reservas in-house encontradas:', inHouseReservations.map(r => r.guestName));
-      
       // Pega a primeira reserva in-house encontrada (mais recente)
       const activeRes = inHouseReservations[0] || null;
-      
-      console.log('[Kiosk] Reserva selecionada:', activeRes?.guestName || 'Nenhuma');
 
       return (
           <TabletApp

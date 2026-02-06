@@ -33,6 +33,26 @@ const normalizeGuestName = (name: string): string => {
 };
 
 const LANGUAGES = ['Português (Brasil)', 'Inglês', 'Espanhol', 'Francês', 'Alemão', 'Outro'];
+const BRAZIL_TZ = 'America/Sao_Paulo';
+
+const formatTimeBrazil = (time?: string | null): string => {
+  if (!time) return '--:--';
+
+  if (/^\d{2}:\d{2}/.test(time)) {
+    return time.slice(0, 5);
+  }
+
+  const parsed = new Date(time);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleTimeString('pt-BR', {
+      timeZone: BRAZIL_TZ,
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  return time;
+};
 
 const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reservation, currentUser, tickets = [], staysReservations = [], onCreateTicket, onClose, onUpdateDetails, onDelete, onDismissCheckout, onAddExpense, onDeleteExpense }) => {
 
@@ -740,9 +760,13 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
           {/* Check-in Row */}
           <div className="p-4 rounded-none border border-gray-200 bg-white">
             <div className="flex justify-between items-center mb-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Calendar size={18} className="text-green-600" />
                 <span className="font-bold text-gray-900">{formatDatePtBR(reservation.checkInDate)}</span>
+                <span className={`inline-flex items-center gap-1 text-xs font-semibold border px-2 py-0.5 rounded-full whitespace-nowrap ${reservation.checkInTime ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
+                  <Clock size={12} className={reservation.checkInTime ? 'text-green-600' : 'text-gray-400'} />
+                  {formatTimeBrazil(reservation.checkInTime)}
+                </span>
               </div>
               <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                 <input type="checkbox" checked={earlyRequest} onChange={e => setEarlyRequest(e.target.checked)} className="rounded text-green-600" />
@@ -769,9 +793,13 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
           {/* Check-out Row */}
           <div className="p-4 rounded-none border border-gray-200 bg-white">
             <div className="flex justify-between items-center mb-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Calendar size={18} className="text-red-600" />
                 <span className="font-bold text-gray-900">{formatDatePtBR(reservation.checkOutDate)}</span>
+                <span className={`inline-flex items-center gap-1 text-xs font-semibold border px-2 py-0.5 rounded-full whitespace-nowrap ${reservation.checkOutTime ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 text-gray-400 border-gray-200'}`} style={reservation.checkOutTime ? { color: '#EA580C' } : undefined}>
+                  <Clock size={12} className={reservation.checkOutTime ? '' : 'text-gray-400'} style={reservation.checkOutTime ? { color: '#EA580C' } : undefined} />
+                  {formatTimeBrazil(reservation.checkOutTime)}
+                </span>
               </div>
               <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                 <input type="checkbox" checked={lateRequest} onChange={e => setLateRequest(e.target.checked)} className="rounded text-red-600" />
