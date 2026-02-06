@@ -191,7 +191,9 @@ export interface Reservation {
   guestName: string;
   language?: string;
   checkInDate: string;
+  checkInTime?: string; // HH:MM format (ex: "15:00")
   checkOutDate: string;
+  checkOutTime?: string; // HH:MM format (ex: "11:00")
   earlyCheckIn?: { requested: boolean; time: string; granted: boolean };
   lateCheckOut?: { requested: boolean; time: string; granted: boolean };
   guestCount: number;
