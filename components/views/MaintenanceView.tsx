@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertCircle, CalendarClock, LogOut as LogOutIcon, ChevronDown, MessageSquare, User } from 'lucide-react';
-import { Ticket, TicketStatus, AppModule, Reservation, UserWithPassword } from '../../types';
+import { Ticket, TicketStatus, AppModule, Reservation, UserWithPassword, User as AppUser } from '../../types';
+import RatingStars from '../shared/RatingStars';
 import { MaintenanceGroup, MaintenanceItem, PeriodPreset } from '../../hooks/features/useMaintenanceFilters';
 import { useMaintenanceCalendar } from '../../hooks/features/useMaintenanceCalendar';
 import { SkeletonCard, SkeletonList } from '../SkeletonLoading';
@@ -44,6 +45,7 @@ interface MaintenanceViewProps {
   staysReservations?: Reservation[];
   maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>;
   allUsers: UserWithPassword[];
+  currentUser?: AppUser;
   isLoading?: boolean;
 }
 
@@ -97,9 +99,11 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   staysReservations = [],
   maintenanceOverrides = {},
   allUsers,
+  currentUser,
   isLoading = false
 }) => {
   const queryClient = useQueryClient();
+  const canSeeGuestRating = currentUser?.role === 'Maintenance' || currentUser?.role === 'Admin';
 
   // Hook dedicado para o modo Calendário
   // NÃO respeita paginação nem filtros de período globais
@@ -315,6 +319,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                     const ticket = item as Ticket;
                     const isOverdue = isTicketOverdue(ticket);
                     const isExpired = ticket.status !== TicketStatus.DONE && new Date(ticket.scheduledDate || ticket.desiredDate) < new Date();
+                    const ticketRatingValue = ticket.rating ?? ticket.guestFeedback?.rating;
 
                     return (
                       <div
@@ -393,6 +398,13 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                             })()}
                           </span>
                         </div>
+
+                        {canSeeGuestRating && typeof ticketRatingValue === 'number' && (
+                          <div className="flex items-center gap-2 text-xs text-yellow-700 mt-2">
+                            <RatingStars rating={ticketRatingValue} readonly size={14} />
+                            <span className="text-[10px] font-semibold text-gray-600">{ticketRatingValue}/5</span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -478,6 +490,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                   // Ticket normal
                   const ticket = item as Ticket;
                   const isExpired = ticket.status !== TicketStatus.DONE && new Date(ticket.scheduledDate || ticket.desiredDate) < new Date();
+                  const ticketRatingValue = ticket.rating ?? ticket.guestFeedback?.rating;
 
                   return (
                     <div
@@ -538,6 +551,12 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                             })()}
                           </span>
                         </span>
+                        {canSeeGuestRating && typeof ticketRatingValue === 'number' && (
+                          <div className="flex items-center gap-2 text-xs text-yellow-700">
+                            <RatingStars rating={ticketRatingValue} readonly size={12} />
+                            <span className="text-[10px] font-semibold text-gray-600">{ticketRatingValue}/5</span>
+                          </div>
+                        )}
                         {/* Data por último */}
                         <span className="text-xs text-gray-600">
                           {formatDatePtBR(ticket.scheduledDate || ticket.desiredDate)}

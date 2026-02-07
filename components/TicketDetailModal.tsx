@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Ticket, TicketStatus, User } from '../types';
 import { X, Calendar, User as UserIcon, Clock, CheckCircle2, AlertTriangle, FileText, Shield, DollarSign, Plus, Trash2, ChevronLeft, LogOut, MessageSquare } from 'lucide-react';
 import { generateId } from '../utils';
+import RatingStars from './shared/RatingStars';
 
 interface TicketDetailModalProps {
  ticket: Ticket;
@@ -19,9 +20,20 @@ interface TicketDetailModalProps {
  currentUser?: User;
 }
 
+/**
+ * Helper: Filtra responsáveis válidos (remove 'Não atribuído' e valores vazios)
+ */
+const getValidAssignees = (ticket: Ticket): string[] => {
+ const assignees = ticket.assignees || (ticket.assignee ? [ticket.assignee] : []);
+ return assignees.filter(a => a && a.trim() !== '' && a !== 'Não atribuído');
+};
+
 const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateStatus, onAssign, onAddExpense, onDeleteExpense, onDeleteTicket, onDismissCheckoutTicket, onSaveObservations, onSaveProblemReport, allUsers, currentUser }) => {
  const isUrgent = ticket.priority.toLowerCase().includes('urgente');
  const isVirtualTicket = (ticket as any)._isVirtual === true;
+ const canSeeGuestRating = currentUser?.role === 'Maintenance' || currentUser?.role === 'Admin';
+ const ticketRatingValue = ticket.rating ?? ticket.guestFeedback?.rating;
+ const ticketRatedAt = ticket.ratedAt ?? ticket.guestFeedback?.createdAt;
  const [showCompletionDate, setShowCompletionDate] = useState(false);
  const [completionDate, setCompletionDate] = useState(() => {
   const now = new Date();
@@ -30,8 +42,8 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
  });
 
  const [assignMode, setAssignMode] = useState(false);
- // Task 1: Alterado para array de responsáveis (máximo 2)
- const [tempAssignees, setTempAssignees] = useState<string[]>(ticket.assignees || (ticket.assignee ? [ticket.assignee] : []));
+ // Task 1: Alterado para array de responsáveis (máximo 2) - BUG FIX: filtrar 'Não atribuído'
+ const [tempAssignees, setTempAssignees] = useState<string[]>(() => getValidAssignees(ticket));
  const [tempScheduledDate, setTempScheduledDate] = useState(ticket.scheduledDate || '');
  const [userSearchFilter, setUserSearchFilter] = useState('');
 
@@ -77,11 +89,16 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
  };
 
  const handleStartTicket = () => {
-  // Task 1: Valida com múltiplos responsáveis
-  const currentAssignees = ticket.assignees || (ticket.assignee ? [ticket.assignee] : []);
-  if (currentAssignees.length === 0 || currentAssignees[0] === 'Não atribuído') {
-   alert("Para iniciar o chamado, é necessário atribuir um responsável técnico primeiro.");
-   setAssignMode(true);
+  // Task 1: Valida com múltiplos responsáveis - BUG FIX: usar getValidAssignees
+  const validAssignees = getValidAssignees(ticket);
+  if (validAssignees.length === 0) {
+   // Verificar permissão antes de abrir modo de edição
+   if (currentUser?.role === 'Maintenance' || currentUser?.role === 'Admin') {
+    alert("Para iniciar o chamado, é necessário atribuir um responsável técnico primeiro.");
+    setAssignMode(true);
+   } else {
+    alert("Para iniciar o chamado, é necessário atribuir um responsável técnico primeiro.\n\nSolicite ao Gerente de Manutenção que atribua um responsável.");
+   }
    return;
   }
   onUpdateStatus(ticket.id, TicketStatus.IN_PROGRESS, undefined, Date.now());
@@ -259,6 +276,22 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
       </div>
      </div>
 
+     {/* Guest Rating (Maintenance/Admin only) */}
+     {canSeeGuestRating && typeof ticketRatingValue === 'number' && (
+      <div className="p-4 bg-yellow-50 rounded-none border border-yellow-200">
+       <h3 className="text-sm font-semibold text-yellow-800 uppercase tracking-wider mb-2">Avaliação do Hóspede</h3>
+       <div className="flex items-center gap-3">
+        <RatingStars rating={ticketRatingValue} readonly size={18} />
+        <span className="text-sm font-semibold text-gray-700">{ticketRatingValue}/5</span>
+        {ticketRatedAt && (
+         <span className="text-xs text-gray-500">
+          {new Date(ticketRatedAt).toLocaleDateString('pt-BR')}
+         </span>
+        )}
+       </div>
+      </div>
+     )}
+
      {/* Task 38: Completion Report Display */}
      {ticket.completionReport && (ticket.completionReport.notes || ticket.completionReport.photos) && (
       <div>
@@ -348,7 +381,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
         <div className="w-full">
          <div className="flex justify-between items-center mb-1">
           <p className="text-sm font-medium text-gray-900">Responsável Técnico</p>
-          {!assignMode && (
+          {!assignMode && (currentUser?.role === 'Maintenance' || currentUser?.role === 'Admin') && (
            <button onClick={() => setAssignMode(true)} className="text-xs text-brand-600 hover:underline p-1">
             {(ticket.assignees && ticket.assignees.length > 0) || ticket.assignee ? 'Alterar' : 'Atribuir'}
            </button>
@@ -357,10 +390,11 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
          
          {!assignMode ? (
            <p className="text-sm text-gray-600 p-2 bg-gray-50 rounded border border-gray-100">
-            {/* Task 1: Exibe múltiplos responsáveis */}
-            {ticket.assignees && ticket.assignees.length > 0 
-              ? ticket.assignees.join(' • ') 
-              : ticket.assignee || 'Não atribuído'}
+            {/* Task 1: Exibe múltiplos responsáveis - BUG FIX: usar getValidAssignees */}
+            {(() => {
+              const validAssignees = getValidAssignees(ticket);
+              return validAssignees.length > 0 ? validAssignees.join(' • ') : 'Não atribuído';
+            })()}
            </p>
          ) : (
           <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-2">
