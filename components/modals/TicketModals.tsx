@@ -136,7 +136,8 @@ const TicketModals: React.FC<TicketModalsProps> = ({
         scheduledDate: selectedTicket.scheduledDate,
         guestAuth: selectedTicket.guestAuth,
         status: updates.status,
-        assignee: selectedTicket.assignee,
+        // BUG FIX: Usar assignees vazio ao invés de pegar assignee que pode ser 'Não atribuído'
+        assignees: selectedTicket.assignees || [],
         createdBy: 'Sistema',
         createdByName: 'Automação de Check-out',
         createdAt: Date.now(),
@@ -286,7 +287,8 @@ const TicketModals: React.FC<TicketModalsProps> = ({
         scheduledDate: selectedTicket.scheduledDate,
         guestAuth: selectedTicket.guestAuth,
         status: selectedTicket.status,
-        assignee: selectedTicket.assignee,
+        // BUG FIX: Usar assignees vazio ao invés de pegar assignee que pode ser 'Não atribuído'
+        assignees: selectedTicket.assignees || [],
         createdBy: 'Sistema',
         createdByName: 'Automação de Check-out',
         createdAt: Date.now(),
@@ -396,7 +398,8 @@ const TicketModals: React.FC<TicketModalsProps> = ({
       scheduledDate: selectedTicket.scheduledDate,
       guestAuth: selectedTicket.guestAuth,
       status: selectedTicket.status,
-      assignee: selectedTicket.assignee,
+      // BUG FIX: Usar assignees vazio ao invés de pegar assignee que pode ser 'Não atribuído'
+      assignees: selectedTicket.assignees || [],
       createdBy: 'Sistema',
       createdByName: 'Automação de Check-out',
       createdAt: Date.now(),
@@ -471,7 +474,8 @@ const TicketModals: React.FC<TicketModalsProps> = ({
       scheduledDate: selectedTicket.scheduledDate,
       guestAuth: selectedTicket.guestAuth,
       status: selectedTicket.status,
-      assignee: selectedTicket.assignee,
+      // BUG FIX: Usar assignees vazio ao invés de pegar assignee que pode ser 'Não atribuído'
+      assignees: selectedTicket.assignees || [],
       createdBy: 'Sistema',
       createdByName: 'Automação de Check-out',
       createdAt: Date.now(),

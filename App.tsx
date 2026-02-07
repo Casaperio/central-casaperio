@@ -679,7 +679,8 @@ function AppContent() {
             scheduledDate: scheduledDate.toISOString(),
             guestAuth: false,
             status: TicketStatus.OPEN,
-            assignee: 'Não atribuído',
+            // BUG FIX: Usar assignees vazio ao invés de assignee 'Não atribuído'
+            assignees: [],
             createdBy: 'system',
             createdByName: 'Sistema Automático',
             createdAt: Date.now(),
@@ -847,10 +848,14 @@ function AppContent() {
               onAddFeedback={(f: GuestFeedback) => storageService.feedbacks.add(f)}
               onTicketFeedback={(ticketId: string, rating: number, comment: string) => {
                  const ticket = tickets.find(t => t.id === ticketId);
-                 if(ticket) {
+                 if (ticket) {
+                     const ratedAt = Date.now();
                      storageService.tickets.update({
                          ...ticket,
-                         guestFeedback: { rating, comment, createdAt: Date.now() }
+                         rating,
+                         ratedAt,
+                         ratingComment: comment || undefined,
+                         guestFeedback: { rating, comment, createdAt: ratedAt }
                      });
                  }
               }}
@@ -1022,6 +1027,7 @@ function AppContent() {
                 staysReservations={staysReservations}
                 maintenanceOverrides={maintenanceOverrides}
                 allUsers={users}
+                currentUser={currentUser}
                 isLoading={staysLoading}
               />
            )}

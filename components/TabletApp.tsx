@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Reservation, Ticket, GuestTip, GuestFeedback, ServiceTypeDefinition, AfterHoursConfig, ConciergeOffer, TicketCategory, TicketStatus, UserWithPassword } from '../types';
 import { generateId, formatCurrency } from '../utils';
+import RatingStars from './shared/RatingStars';
+import { isAutomaticCheckoutTicket } from '../utils/ticketFilters';
 import {
  Home, Wrench, MessageSquare, Star, Plus, X, Info,
  MapPin, Clock, Calendar, CheckCircle2, Tag,
@@ -28,6 +30,19 @@ interface TabletAppProps {
  onTicketFeedback: (ticketId: string, rating: number, comment: string) => void;
  onUpdateOffer: (offer: ConciergeOffer) => void;
 }
+
+const normalizeGuestName = (name: string): string => {
+  return name
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+};
+
+const hasTicketRating = (ticket: Ticket): boolean => {
+  return typeof ticket.rating === 'number' || typeof ticket.guestFeedback?.rating === 'number';
+};
 
 const TabletApp: React.FC<TabletAppProps> = ({
  propertyCode,
@@ -61,11 +76,18 @@ const TabletApp: React.FC<TabletAppProps> = ({
  const [feedbackRating, setFeedbackRating] = useState(5);
  const [feedbackComment, setFeedbackComment] = useState('');
 
+ // Ticket Rating State
+ const [showTicketRatingModal, setShowTicketRatingModal] = useState(false);
+ const [ratingTicket, setRatingTicket] = useState<Ticket | null>(null);
+ const [ticketRating, setTicketRating] = useState(5);
+ const [dismissedRatingTickets, setDismissedRatingTickets] = useState<string[]>([]);
+
  // Exit Kiosk State
  const [showExitModal, setShowExitModal] = useState(false);
  const [exitPassword, setExitPassword] = useState('');
 
  const guestName = currentReservation?.guestName || 'Hóspede';
+ const normalizedGuestName = normalizeGuestName(currentReservation?.guestName || '');
 
  // Fetch Weather on Mount
  useEffect(() => {
@@ -74,11 +96,37 @@ const TabletApp: React.FC<TabletAppProps> = ({
    });
  }, []);
 
+ const guestTickets = useMemo(() => {
+  if (!currentReservation) return [];
+
+  return tickets
+    .filter(t => t.propertyCode === propertyCode)
+    .filter(t => !isAutomaticCheckoutTicket(t))
+    .filter(t => {
+      if (t.reservationId && t.reservationId === currentReservation.id) return true;
+
+      const createdByGuest = t.createdBy === 'tablet' || t.isGuestRequest === true || t.guestAuth === true;
+      if (!createdByGuest) return false;
+
+      const nameMatch = normalizeGuestName(t.createdByName || '') === normalizedGuestName;
+      return nameMatch;
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
+ }, [tickets, propertyCode, currentReservation, normalizedGuestName]);
+
+ const guestMaintenanceTickets = useMemo(() => {
+  return guestTickets.filter(t => t.category !== 'concierge');
+ }, [guestTickets]);
+
  const handleTicketSubmit = (ticketData: any) => {
   onAddTicket({
    ...ticketData,
    propertyCode, // Ensure property is set
-   guestAuth: true // Default for tablet requests? Or taken from form
+   guestAuth: true, // Default for tablet requests? Or taken from form
+   isGuestRequest: true,
+   createdBy: 'tablet',
+   createdByName: guestName,
+   reservationId: currentReservation?.id || ticketData.reservationId
   });
   setShowTicketModal(false);
  };
@@ -120,7 +168,8 @@ const TabletApp: React.FC<TabletAppProps> = ({
     createdBy: 'tablet',
     createdByName: guestName,
     createdAt: Date.now(),
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    reservationId: currentReservation?.id
   });
 
   alert('Solicitação enviada com sucesso! Em breve entraremos em contato.');
@@ -141,6 +190,8 @@ const TabletApp: React.FC<TabletAppProps> = ({
    setCustomRequestMode(false);
    setShowTicketModal(false);
    setShowFeedbackModal(false);
+   setShowTicketRatingModal(false);
+   setRatingTicket(null);
    setOfferQuantity(1);
  };
 
@@ -159,6 +210,50 @@ const TabletApp: React.FC<TabletAppProps> = ({
    setFeedbackRating(5);
    alert('Obrigado pelo seu feedback!');
  };
+
+ const openTicketRatingModal = (ticket: Ticket) => {
+  setRatingTicket(ticket);
+  setTicketRating(5);
+  setShowTicketRatingModal(true);
+ };
+
+ const handleTicketRatingSubmit = () => {
+  if (ratingTicket) {
+   onTicketFeedback(ratingTicket.id, ticketRating, '');
+   setDismissedRatingTickets((prev) => (prev.includes(ratingTicket.id) ? prev : [...prev, ratingTicket.id]));
+  }
+  setShowTicketRatingModal(false);
+  setRatingTicket(null);
+ };
+
+ const handleTicketRatingSkip = () => {
+  if (ratingTicket) {
+   setDismissedRatingTickets((prev) => (prev.includes(ratingTicket.id) ? prev : [...prev, ratingTicket.id]));
+  }
+  setShowTicketRatingModal(false);
+  setRatingTicket(null);
+ };
+
+ useEffect(() => {
+  setDismissedRatingTickets([]);
+  setShowTicketRatingModal(false);
+  setRatingTicket(null);
+ }, [currentReservation?.id]);
+
+ useEffect(() => {
+  if (ratingTicket) return;
+
+  const pendingRating = guestMaintenanceTickets.find(
+    (t) =>
+      t.status === TicketStatus.DONE &&
+      !hasTicketRating(t) &&
+      !dismissedRatingTickets.includes(t.id)
+  );
+
+  if (pendingRating) {
+   openTicketRatingModal(pendingRating);
+  }
+ }, [guestMaintenanceTickets, dismissedRatingTickets, ratingTicket]);
 
  // Exit Kiosk Handler with Password Validation
  const handleExitKiosk = (e: React.FormEvent) => {
@@ -179,7 +274,9 @@ const TabletApp: React.FC<TabletAppProps> = ({
    }
  };
 
- const activeTickets = tickets.filter(t => t.status !== 'Concluído' && t.propertyCode === propertyCode).sort((a,b) => b.createdAt - a.createdAt);
+ const activeTickets = guestMaintenanceTickets
+  .filter(t => t.status !== TicketStatus.DONE)
+  .sort((a, b) => b.createdAt - a.createdAt);
 
  const WeatherIcon = ({ icon, size }: { icon: string, size: number }) => {
    switch (icon) {
@@ -560,11 +657,11 @@ const TabletApp: React.FC<TabletAppProps> = ({
          </button>
 
          {/* Existing Tickets List */}
-         {tickets.filter(t => t.propertyCode === propertyCode).length > 0 && (
+         {guestMaintenanceTickets.length > 0 && (
            <div className="mt-8">
              <h3 className="text-sm font-bold text-gray-500 uppercase mb-3 ml-2">Histórico de Solicitações</h3>
              <div className="space-y-3">
-               {tickets.filter(t => t.propertyCode === propertyCode).map(t => (
+               {guestMaintenanceTickets.map(t => (
                  <div key={t.id} className="bg-white p-4 rounded-none border border-gray-100 flex justify-between items-center shadow-sm">
                    <div>
                      <p className="font-bold text-gray-800">{t.serviceType}</p>
@@ -573,22 +670,19 @@ const TabletApp: React.FC<TabletAppProps> = ({
                    </div>
                    <div className="flex flex-col items-end gap-2">
                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                       t.status === 'Concluído' ? 'bg-green-100 text-green-700' : 
-                       t.status === 'Em Andamento' ? 'bg-yellow-100 text-yellow-700' : 
+                       t.status === TicketStatus.DONE ? 'bg-green-100 text-green-700' : 
+                       t.status === TicketStatus.IN_PROGRESS ? 'bg-yellow-100 text-yellow-700' : 
                        'bg-gray-100 text-gray-600'
                      }`}>
                        {t.status}
                      </span>
-                     {t.status === 'Concluído' && !t.guestFeedback && (
-                       <button 
-                        onClick={() => {
-                          const rating = prompt('Avalie de 1 a 5:');
-                          if(rating) onTicketFeedback(t.id, parseInt(rating), '');
-                        }}
-                        className="text-xs text-brand-600 font-bold hover:underline"
-                       >
-                         Avaliar
-                       </button>
+                     {t.status === TicketStatus.DONE && !hasTicketRating(t) && (
+                      <button 
+                       onClick={() => openTicketRatingModal(t)}
+                       className="text-xs text-brand-600 font-bold hover:underline"
+                      >
+                        Avaliar
+                      </button>
                      )}
                    </div>
                  </div>
@@ -725,8 +819,40 @@ const TabletApp: React.FC<TabletAppProps> = ({
        isPreventiveMode={false}
        category={ticketCategory}
        hidePreventiveToggle={true}
-       initialData={{ propertyCode }}
+       initialData={{ propertyCode, reservationId: currentReservation?.id }}
      />
+   )}
+
+   {/* TICKET RATING MODAL */}
+   {showTicketRatingModal && ratingTicket && (
+     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+       <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
+         <div className="text-center mb-6">
+           <h3 className="text-xl font-bold text-gray-800">Como foi o atendimento?</h3>
+           <p className="text-gray-500 text-sm mt-1">Avalie o chamado concluído. É opcional.</p>
+           <p className="text-xs text-gray-400 mt-2">{ratingTicket.serviceType}</p>
+         </div>
+
+         <div className="flex justify-center mb-6">
+           <RatingStars rating={ticketRating} onChange={setTicketRating} size={36} />
+         </div>
+
+         <div className="flex gap-3">
+           <button 
+             onClick={handleTicketRatingSkip}
+             className="flex-1 py-3 text-gray-600 bg-gray-100 rounded-none font-bold hover:bg-gray-200 transition-colors"
+           >
+             Agora não
+           </button>
+           <button 
+             onClick={handleTicketRatingSubmit}
+             className="flex-1 py-3 bg-brand-600 text-white rounded-none font-bold hover:bg-brand-700 transition-colors shadow-lg shadow-brand-600/30"
+           >
+             Enviar Avaliação
+           </button>
+         </div>
+       </div>
+     </div>
    )}
 
    {/* FEEDBACK MODAL */}

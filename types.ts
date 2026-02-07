@@ -143,6 +143,9 @@ export interface Ticket {
     comment: string;
     createdAt: number;
   };
+  rating?: number;
+  ratedAt?: number;
+  ratingComment?: string;
   startedAt?: number;
   completionReport?: {
     condition: 'perfect' | 'issues';
