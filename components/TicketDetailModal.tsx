@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Ticket, TicketStatus, User } from '../types';
-import { X, Calendar, User as UserIcon, Clock, CheckCircle2, AlertTriangle, FileText, Shield, DollarSign, Plus, Trash2, ChevronLeft, LogOut, MessageSquare } from 'lucide-react';
-import { generateId } from '../utils';
+import { X, Calendar, User as UserIcon, Clock, CheckCircle2, AlertTriangle, FileText, Shield, DollarSign, Plus, Trash2, ChevronLeft, LogOut, MessageSquare, Navigation } from 'lucide-react';
+import { generateId, getValidAssignees, canTransitionStatus } from '../utils';
 import RatingStars from './shared/RatingStars';
 
 interface TicketDetailModalProps {
@@ -19,14 +19,6 @@ interface TicketDetailModalProps {
  allUsers: { name: string; role: string }[];
  currentUser?: User;
 }
-
-/**
- * Helper: Filtra responsáveis válidos (remove 'Não atribuído' e valores vazios)
- */
-const getValidAssignees = (ticket: Ticket): string[] => {
- const assignees = ticket.assignees || (ticket.assignee ? [ticket.assignee] : []);
- return assignees.filter(a => a && a.trim() !== '' && a !== 'Não atribuído');
-};
 
 const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateStatus, onAssign, onAddExpense, onDeleteExpense, onDeleteTicket, onDismissCheckoutTicket, onSaveObservations, onSaveProblemReport, allUsers, currentUser }) => {
  const isUrgent = ticket.priority.toLowerCase().includes('urgente');
@@ -69,27 +61,36 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
  const renderStatusBadge = (status: TicketStatus) => {
   switch (status) {
    case TicketStatus.OPEN: return <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs md:text-sm font-semibold whitespace-nowrap">Aberto</span>;
+   case TicketStatus.ASSIGNED: return <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs md:text-sm font-semibold whitespace-nowrap">Atribuído</span>;
+   case TicketStatus.ON_THE_WAY: return <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs md:text-sm font-semibold whitespace-nowrap">A caminho</span>;
    case TicketStatus.IN_PROGRESS: return <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs md:text-sm font-semibold whitespace-nowrap">Em Andamento</span>;
    case TicketStatus.DONE: return <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs md:text-sm font-semibold whitespace-nowrap">Concluído</span>;
   }
  };
 
  const handleAssignSubmit = () => {
-  // Task 1: Valida múltiplos responsáveis (máximo 2)
-  if (tempAssignees.length > 0 && tempScheduledDate) {
-   if (tempAssignees.length > 2) {
-    alert("Máximo de 2 responsáveis técnicos por chamado.");
-    return;
-   }
-   onAssign(ticket.id, tempAssignees, tempScheduledDate);
-   setAssignMode(false);
-  } else {
-   alert("Selecione pelo menos um responsável e uma data de realização.");
+  // Task 7: Valida múltiplos responsáveis (máximo 2) e ETA obrigatório
+  if (tempAssignees.length === 0) {
+   alert("Selecione pelo menos um responsável técnico.");
+   return;
   }
+  
+  if (tempAssignees.length > 2) {
+   alert("Máximo de 2 responsáveis técnicos por chamado.");
+   return;
+  }
+  
+  if (!tempScheduledDate) {
+   alert("A Data de Realização (Prevista) é obrigatória ao atribuir responsável.\n\nEsta é a data/hora estimada para conclusão do chamado.");
+   return;
+  }
+  
+  onAssign(ticket.id, tempAssignees, tempScheduledDate);
+  setAssignMode(false);
  };
 
  const handleStartTicket = () => {
-  // Task 1: Valida com múltiplos responsáveis - BUG FIX: usar getValidAssignees
+  // Task 7: Valida responsáveis e transiciona para IN_PROGRESS
   const validAssignees = getValidAssignees(ticket);
   if (validAssignees.length === 0) {
    // Verificar permissão antes de abrir modo de edição
@@ -101,7 +102,33 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
    }
    return;
   }
+  
+  // Validar transição
+  const transition = canTransitionStatus(ticket.status, TicketStatus.IN_PROGRESS);
+  if (!transition.valid) {
+   alert(transition.reason || "Transição de status inválida");
+   return;
+  }
+  
   onUpdateStatus(ticket.id, TicketStatus.IN_PROGRESS, undefined, Date.now());
+ };
+
+ // Task 7: Handler para marcar "A caminho"
+ const handleOnTheWay = () => {
+  const validAssignees = getValidAssignees(ticket);
+  if (validAssignees.length === 0) {
+   alert("Apenas o técnico atribuído pode marcar como 'A caminho'.");
+   return;
+  }
+  
+  // Validar transição  
+  const transition = canTransitionStatus(ticket.status, TicketStatus.ON_THE_WAY);
+  if (!transition.valid) {
+   alert(transition.reason || "Este chamado precisa estar 'Atribuído' para marcar como 'A caminho'.");
+   return;
+  }
+  
+  onUpdateStatus(ticket.id, TicketStatus.ON_THE_WAY, undefined, undefined);
  };
 
  // Task 38: Handle file upload and convert to base64
@@ -790,31 +817,33 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
         )}
 
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto justify-end">
-         {ticket.status !== TicketStatus.DONE && (
+         {/* Task 7: Botão "A caminho" quando status = ASSIGNED */}
+         {ticket.status === TicketStatus.ASSIGNED && (
           <button
-           onClick={() => {
-            if (ticket.status === TicketStatus.OPEN) {
-             handleStartTicket();
-            } else {
-             setShowCompletionDate(true);
-            }
-           }}
-           className={`flex items-center justify-center gap-2 px-6 py-3 md:py-2.5 rounded-lg font-semibold text-white transition-colors shadow-lg shadow-brand-500/10 active:scale-95 duration-200 w-full md:w-auto
-            ${ticket.status === TicketStatus.OPEN ? 'bg-brand-600 hover:bg-brand-700' : 'bg-green-600 hover:bg-green-700'}`}
+           onClick={handleOnTheWay}
+           className="flex items-center justify-center gap-2 px-6 py-3 md:py-2.5 rounded-lg font-semibold text-white bg-purple-600 hover:bg-purple-700 transition-colors shadow-lg shadow-purple-500/10 active:scale-95 duration-200 w-full md:w-auto"
           >
-           {ticket.status === TicketStatus.OPEN ? (
-            <>Iniciar Atendimento</>
-           ) : (
-            <><CheckCircle2 size={20} /> Concluir Chamado</>
-           )}
+           <Navigation size={20} /> Estou a Caminho
           </button>
          )}
-         {ticket.status === TicketStatus.DONE && (
+         
+         {/* Task 7: Botão "Iniciar Atendimento" quando status = ASSIGNED, ON_THE_WAY ou OPEN */}
+         {(ticket.status === TicketStatus.OPEN || ticket.status === TicketStatus.ASSIGNED || ticket.status === TicketStatus.ON_THE_WAY) && (
           <button
-           onClick={() => onUpdateStatus(ticket.id, TicketStatus.IN_PROGRESS)}
-           className="px-6 py-3 md:py-2.5 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 w-full md:w-auto"
+           onClick={handleStartTicket}
+           className="flex items-center justify-center gap-2 px-6 py-3 md:py-2.5 rounded-lg font-semibold text-white bg-brand-600 hover:bg-brand-700 transition-colors shadow-lg shadow-brand-500/10 active:scale-95 duration-200 w-full md:w-auto"
           >
-           Reabrir Chamado
+           Iniciar Atendimento
+          </button>
+         )}
+         
+         {/* Botão "Concluir" quando status = IN_PROGRESS */}
+         {ticket.status === TicketStatus.IN_PROGRESS && (
+          <button
+           onClick={() => setShowCompletionDate(true)}
+           className="flex items-center justify-center gap-2 px-6 py-3 md:py-2.5 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors shadow-lg shadow-green-500/10 active:scale-95 duration-200 w-full md:w-auto"
+          >
+           <CheckCircle2 size={20} /> Concluir Chamado
           </button>
          )}
         </div>

@@ -357,6 +357,8 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
                               ${ticket.status === TicketStatus.OPEN ? 'bg-red-50 text-red-700' :
+                                ticket.status === TicketStatus.ASSIGNED ? 'bg-blue-50 text-blue-700' :
+                                ticket.status === TicketStatus.ON_THE_WAY ? 'bg-purple-50 text-purple-700' :
                                 ticket.status === TicketStatus.IN_PROGRESS ? 'bg-yellow-50 text-yellow-700' :
                                 'bg-green-50 text-green-700'}`}>
                               {ticket.status}
@@ -509,6 +511,8 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                         {/* Badge de status */}
                         <div className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded ${
                           ticket.status === TicketStatus.OPEN ? 'bg-red-100 text-red-700' :
+                          ticket.status === TicketStatus.ASSIGNED ? 'bg-blue-100 text-blue-700' :
+                          ticket.status === TicketStatus.ON_THE_WAY ? 'bg-purple-100 text-purple-700' :
                           ticket.status === TicketStatus.IN_PROGRESS ? 'bg-yellow-100 text-yellow-700' :
                           'bg-green-100 text-green-700'
                         }`}>

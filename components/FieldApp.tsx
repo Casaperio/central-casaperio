@@ -196,7 +196,10 @@ const FieldApp: React.FC<FieldAppProps> = ({
        <div className="flex-1 p-6 overflow-y-auto">
          {/* Status Banner */}
          <div className={`p-4 rounded-none mb-6 flex items-center justify-between ${
-           activeTicket.status === TicketStatus.OPEN ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-yellow-50 text-yellow-700 border border-yellow-100'
+           activeTicket.status === TicketStatus.OPEN ? 'bg-red-50 text-red-700 border border-red-100' : 
+           activeTicket.status === TicketStatus.ASSIGNED ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+           activeTicket.status === TicketStatus.ON_THE_WAY ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+           'bg-yellow-50 text-yellow-700 border border-yellow-100'
          }`}>
            <div className="font-bold flex items-center gap-2">
              {activeTicket.status === TicketStatus.OPEN ? <AlertTriangle size={20}/> : <Clock size={20}/>}
@@ -235,7 +238,7 @@ const FieldApp: React.FC<FieldAppProps> = ({
 
        {/* ACTION BAR (Fixed Bottom) */}
        <div className="p-6 border-t border-gray-100 bg-white pb-safe">
-         {activeTicket.status === TicketStatus.OPEN ? (
+         {activeTicket.status === TicketStatus.OPEN || activeTicket.status === TicketStatus.ASSIGNED || activeTicket.status === TicketStatus.ON_THE_WAY ? (
            <div className="grid grid-cols-2 gap-4">
              <button 
               onClick={() => openMaps(prop?.address || activeTicket.propertyCode)}
@@ -432,6 +435,9 @@ const FieldApp: React.FC<FieldAppProps> = ({
                <div className="flex justify-between items-start mb-2">
                  <div>
                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                     ticket.status === TicketStatus.OPEN ? 'bg-red-100 text-red-800' :
+                     ticket.status === TicketStatus.ASSIGNED ? 'bg-blue-100 text-blue-800' :
+                     ticket.status === TicketStatus.ON_THE_WAY ? 'bg-purple-100 text-purple-800' :
                      ticket.status === TicketStatus.IN_PROGRESS ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
                    }`}>
                      {ticket.status}
@@ -483,6 +489,9 @@ const FieldApp: React.FC<FieldAppProps> = ({
              <div className="flex justify-between items-start mb-2">
                <div>
                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                   ticket.status === TicketStatus.OPEN ? 'bg-red-100 text-red-800' :
+                   ticket.status === TicketStatus.ASSIGNED ? 'bg-blue-100 text-blue-800' :
+                   ticket.status === TicketStatus.ON_THE_WAY ? 'bg-purple-100 text-purple-800' :
                    ticket.status === TicketStatus.IN_PROGRESS ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
                  }`}>
                    {ticket.status}

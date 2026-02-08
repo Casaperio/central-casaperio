@@ -13,6 +13,8 @@ export type AppModule = 'maintenance' | 'concierge' | 'guest' | 'reservations' |
 
 export enum TicketStatus {
   OPEN = 'Aberto',
+  ASSIGNED = 'Atribuído',
+  ON_THE_WAY = 'A caminho',
   IN_PROGRESS = 'Em Andamento',
   DONE = 'Concluído'
 }
