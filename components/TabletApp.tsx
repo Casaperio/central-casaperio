@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Reservation, Ticket, GuestTip, GuestFeedback, ServiceTypeDefinition, AfterHoursConfig, ConciergeOffer, TicketCategory, TicketStatus, UserWithPassword } from '../types';
-import { generateId, formatCurrency } from '../utils';
+import { generateId, formatCurrency, getValidAssignees, formatDatePtBR } from '../utils';
 import RatingStars from './shared/RatingStars';
 import { isAutomaticCheckoutTicket } from '../utils/ticketFilters';
 import {
@@ -442,7 +442,7 @@ const TabletApp: React.FC<TabletAppProps> = ({
            </button>
          </div>
 
-         {/* Active Requests */}
+         {/* Active Requests - Task 7: Mostrar responsável/ETA/avatar para status ASSIGNED/ON_THE_WAY/IN_PROGRESS */}
          {activeTickets.length > 0 && (
            <div className="bg-white rounded-none shadow-sm border border-gray-100 p-6">
              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -450,15 +450,39 @@ const TabletApp: React.FC<TabletAppProps> = ({
              </h3>
              <div className="space-y-3">
                {activeTickets.map(t => {
-                 const assignee = users.find(u => u.name === t.assignee);
+                 // Task 7: Usar getValidAssignees para obter responsáveis válidos
+                 const validAssignees = getValidAssignees(t);
+                 const assigneeName = validAssignees.length > 0 ? validAssignees[0] : null;
+                 const assignee = assigneeName ? users.find(u => u.name === assigneeName) : null;
+                 
+                 // Task 7: Mostrar info de responsável apenas para status ASSIGNED, ON_THE_WAY, IN_PROGRESS
+                 const showAssigneeInfo = (
+                   t.status === TicketStatus.ASSIGNED || 
+                   t.status === TicketStatus.ON_THE_WAY || 
+                   t.status === TicketStatus.IN_PROGRESS
+                 ) && assignee;
+                 
                  return (
-                   <div key={t.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-none">
-                     <div className="flex-1">
-                       <p className="font-medium text-gray-900">{t.serviceType}</p>
-                       <p className="text-sm text-gray-500">{t.description}</p>
+                   <div key={t.id} className="p-4 bg-gray-50 rounded-none border border-gray-200">
+                     <div className="flex justify-between items-start mb-3">
+                       <div className="flex-1">
+                         <p className="font-medium text-gray-900">{t.serviceType}</p>
+                         <p className="text-sm text-gray-500">{t.description}</p>
+                       </div>
+                       <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase whitespace-nowrap ml-2 ${
+                         t.status === TicketStatus.OPEN ? 'bg-red-100 text-red-700' :
+                         t.status === TicketStatus.ASSIGNED ? 'bg-blue-100 text-blue-700' :
+                         t.status === TicketStatus.ON_THE_WAY ? 'bg-purple-100 text-purple-700' :
+                         t.status === TicketStatus.IN_PROGRESS ? 'bg-yellow-100 text-yellow-700' :
+                         'bg-gray-200 text-gray-600'
+                       }`}>
+                         {t.status}
+                       </span>
                      </div>
-                     <div className="flex items-center gap-3">
-                       {assignee && (
+                     
+                     {/* Task 7: Exibir responsável + ETA + avatar quando status ∈ {ASSIGNED, ON_THE_WAY, IN_PROGRESS} */}
+                     {showAssigneeInfo && (
+                       <div className="flex items-center justify-between pt-3 border-t border-gray-200">
                          <div className="flex items-center gap-2">
                            {assignee.avatar ? (
                              <img src={assignee.avatar} alt={assignee.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
@@ -467,15 +491,22 @@ const TabletApp: React.FC<TabletAppProps> = ({
                                <User size={16} className="text-brand-600" />
                              </div>
                            )}
-                           <span className="text-sm font-medium text-gray-700">{assignee.name.split(' ')[0]}</span>
+                           <div>
+                             <p className="text-sm font-medium text-gray-900">{assignee.name.split(' ')[0]}</p>
+                             <p className="text-xs text-gray-500">Responsável</p>
+                           </div>
                          </div>
-                       )}
-                       <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                         t.status === 'Em Andamento' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-200 text-gray-600'
-                       }`}>
-                         {t.status}
-                       </span>
-                     </div>
+                         
+                         {t.scheduledDate && (
+                           <div className="text-right">
+                             <p className="text-sm font-medium text-gray-900">
+                               {new Date(t.scheduledDate).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                             </p>
+                             <p className="text-xs text-gray-500">Previsão</p>
+                           </div>
+                         )}
+                       </div>
+                     )}
                    </div>
                  );
                })}
@@ -656,37 +687,83 @@ const TabletApp: React.FC<TabletAppProps> = ({
            <ChevronRight className="ml-auto text-gray-300" />
          </button>
 
-         {/* Existing Tickets List */}
+         {/* Existing Tickets List - Task 7: UI completa com avatar, nome, ETA */}
          {guestMaintenanceTickets.length > 0 && (
            <div className="mt-8">
              <h3 className="text-sm font-bold text-gray-500 uppercase mb-3 ml-2">Histórico de Solicitações</h3>
              <div className="space-y-3">
-               {guestMaintenanceTickets.map(t => (
-                 <div key={t.id} className="bg-white p-4 rounded-none border border-gray-100 flex justify-between items-center shadow-sm">
-                   <div>
-                     <p className="font-bold text-gray-800">{t.serviceType}</p>
-                     <p className="text-sm text-gray-500">{t.description}</p>
-                     <p className="text-xs text-gray-400 mt-1">{new Date(t.createdAt).toLocaleDateString()}</p>
-                   </div>
-                   <div className="flex flex-col items-end gap-2">
-                     <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                       t.status === TicketStatus.DONE ? 'bg-green-100 text-green-700' : 
-                       t.status === TicketStatus.IN_PROGRESS ? 'bg-yellow-100 text-yellow-700' : 
-                       'bg-gray-100 text-gray-600'
-                     }`}>
-                       {t.status}
-                     </span>
+               {guestMaintenanceTickets.map(t => {
+                 // Task 7: Usar getValidAssignees para obter responsáveis válidos
+                 const validAssignees = getValidAssignees(t);
+                 const assigneeName = validAssignees.length > 0 ? validAssignees[0] : null;
+                 const assignee = assigneeName ? users.find(u => u.name === assigneeName) : null;
+                 
+                 // Task 7: Mostrar info de responsável apenas para status ASSIGNED, ON_THE_WAY, IN_PROGRESS
+                 const showAssigneeInfo = (
+                   t.status === TicketStatus.ASSIGNED || 
+                   t.status === TicketStatus.ON_THE_WAY || 
+                   t.status === TicketStatus.IN_PROGRESS
+                 ) && assignee;
+                 
+                 return (
+                   <div key={t.id} className="bg-white p-4 rounded-none border border-gray-200 shadow-sm">
+                     <div className="flex justify-between items-start mb-3">
+                       <div className="flex-1">
+                         <p className="font-bold text-gray-800">{t.serviceType}</p>
+                         <p className="text-sm text-gray-500">{t.description}</p>
+                         <p className="text-xs text-gray-400 mt-1">{new Date(t.createdAt).toLocaleDateString()}</p>
+                       </div>
+                       <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase whitespace-nowrap ml-2 ${
+                         t.status === TicketStatus.OPEN ? 'bg-red-100 text-red-700' :
+                         t.status === TicketStatus.ASSIGNED ? 'bg-blue-100 text-blue-700' :
+                         t.status === TicketStatus.ON_THE_WAY ? 'bg-purple-100 text-purple-700' :
+                         t.status === TicketStatus.IN_PROGRESS ? 'bg-yellow-100 text-yellow-700' :
+                         'bg-green-100 text-green-700'
+                       }`}>
+                         {t.status}
+                       </span>
+                     </div>
+                     
+                     {/* Task 7: Exibir responsável + ETA + avatar quando status ∈ {ASSIGNED, ON_THE_WAY, IN_PROGRESS} */}
+                     {showAssigneeInfo && (
+                       <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                         <div className="flex items-center gap-2">
+                           {assignee.avatar ? (
+                             <img src={assignee.avatar} alt={assignee.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                           ) : (
+                             <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center">
+                               <User size={16} className="text-brand-600" />
+                             </div>
+                           )}
+                           <div>
+                             <p className="text-sm font-medium text-gray-900">{assignee.name.split(' ')[0]}</p>
+                             <p className="text-xs text-gray-500">Responsável</p>
+                           </div>
+                         </div>
+                         
+                         {t.scheduledDate && (
+                           <div className="text-right">
+                             <p className="text-sm font-medium text-gray-900">
+                               {new Date(t.scheduledDate).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                             </p>
+                             <p className="text-xs text-gray-500">Previsão</p>
+                           </div>
+                         )}
+                       </div>
+                     )}
+                     
+                     {/* Botão de avaliação para chamados concluídos */}
                      {t.status === TicketStatus.DONE && !hasTicketRating(t) && (
-                      <button 
-                       onClick={() => openTicketRatingModal(t)}
-                       className="text-xs text-brand-600 font-bold hover:underline"
-                      >
-                        Avaliar
-                      </button>
+                       <button 
+                         onClick={() => openTicketRatingModal(t)}
+                         className="w-full mt-3 py-2 bg-brand-50 text-brand-600 font-bold rounded-lg hover:bg-brand-100 transition-colors text-sm"
+                       >
+                         ⭐ Avaliar Atendimento
+                       </button>
                      )}
                    </div>
-                 </div>
-               ))}
+                 );
+               })}
              </div>
            </div>
          )}
