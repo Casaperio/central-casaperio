@@ -7,7 +7,7 @@ interface UseMaintenanceCalendarProps {
   staysReservations: Reservation[];
   currentMonth: Date; // Mês sendo visualizado no calendário
   searchTerm: string;
-  filterMaintenanceProperty: string;
+  filterMaintenanceProperty: string | string[]; // SUPORTA STRING OU ARRAY
   filterMaintenanceType: string[];
   activeModule: string | null;
   maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>;
@@ -81,7 +81,14 @@ export function useMaintenanceCalendar({
           t.propertyCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
           t.assignee?.toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesProperty = filterMaintenanceProperty === 'all' || t.propertyCode === filterMaintenanceProperty;
+        // Filtro por propriedade - SUPORTA STRING OU ARRAY
+        let matchesProperty = true;
+        if (Array.isArray(filterMaintenanceProperty)) {
+          matchesProperty = filterMaintenanceProperty.length === 0 || 
+                            filterMaintenanceProperty.includes(t.propertyCode);
+        } else {
+          matchesProperty = filterMaintenanceProperty === 'all' || t.propertyCode === filterMaintenanceProperty;
+        }
 
         // Filtro de tipo (multi-seleção)
         let matchesType = filterMaintenanceType.length === 0; // Se vazio, mostrar todos
@@ -133,7 +140,14 @@ export function useMaintenanceCalendar({
           r.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           r.propertyCode.toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesProperty = filterMaintenanceProperty === 'all' || r.propertyCode === filterMaintenanceProperty;
+        // Filtro por propriedade - SUPORTA STRING OU ARRAY
+        let matchesProperty = true;
+        if (Array.isArray(filterMaintenanceProperty)) {
+          matchesProperty = filterMaintenanceProperty.length === 0 || 
+                            filterMaintenanceProperty.includes(r.propertyCode);
+        } else {
+          matchesProperty = filterMaintenanceProperty === 'all' || r.propertyCode === filterMaintenanceProperty;
+        }
 
         if (matchesSearch && matchesProperty) {
           // Criar ticket virtual para checkout

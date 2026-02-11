@@ -88,7 +88,7 @@ interface UseMaintenanceFiltersProps {
   searchTerm: string;
   filterStatus: string;
   filterMaintenanceAssignee: string | string[]; // Agora aceita string ou array
-  filterMaintenanceProperty: string;
+  filterMaintenanceProperty: string | string[]; // AGORA ACEITA STRING OU ARRAY
   filterMaintenanceType: string[];
   maintenanceStatusFilter?: 'all' | 'in_progress'; // NOVO: Filtro de status
   activeModule: string | null;
@@ -232,7 +232,16 @@ export function useMaintenanceFilters({
         matchesAssignee = filterMaintenanceAssignee === 'all' || t.assignee === filterMaintenanceAssignee;
       }
       
-      const matchesProperty = filterMaintenanceProperty === 'all' || t.propertyCode === filterMaintenanceProperty;
+      // Filtro por propriedade - AGORA SUPORTA STRING OU ARRAY
+      let matchesProperty = true;
+      if (Array.isArray(filterMaintenanceProperty)) {
+        // Multi-select: filtra se a propriedade está na lista OU se lista está vazia
+        matchesProperty = filterMaintenanceProperty.length === 0 || 
+                          filterMaintenanceProperty.includes(t.propertyCode);
+      } else {
+        // Backward compatibility: string simples
+        matchesProperty = filterMaintenanceProperty === 'all' || t.propertyCode === filterMaintenanceProperty;
+      }
 
       // Filtro por tipo (multi-seleção)
       let matchesType = true;
@@ -270,23 +279,64 @@ export function useMaintenanceFilters({
         });
       }
 
+      // Task 3: Função auxiliar para verificar se ticket está atrasado (reutilizada na filtragem)
+      const isTicketOverdueInScope = (ticket: Ticket): boolean => {
+        // Tickets concluídos nunca estão atrasados
+        if (ticket.status === TicketStatus.DONE) return false;
+        
+        // Pegar a data limite (prioridade: scheduledDate > desiredDate)
+        const deadline = ticket.scheduledDate || ticket.desiredDate;
+        if (!deadline) return false;
+        
+        // Marco temporal: "a partir de hoje" para evitar backlog antigo
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        // Verificar se o ticket foi criado/agendado "a partir de hoje"
+        const ticketDate = new Date(ticket.createdAt);
+        ticketDate.setHours(0, 0, 0, 0);
+        
+        const scheduledDate = new Date(deadline);
+        scheduledDate.setHours(0, 0, 0, 0);
+        
+        // Considerar apenas tickets criados hoje ou no futuro, OU com data desejada >= hoje
+        const isWithinScope = ticketDate >= today || scheduledDate >= today;
+        if (!isWithinScope) return false;
+        
+        // Comparar deadline com agora
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        
+        const deadlineDate = new Date(deadline);
+        deadlineDate.setHours(0, 0, 0, 0);
+        
+        return deadlineDate < now;
+      };
+
       // Filtrar por período de data (apenas se shouldFilterByPeriod = true)
       if (shouldFilterByPeriod && periodStartDate && periodEndDate) {
-        // Tickets sem scheduledDate e não-concluídos vão para "Aguardando Agendamento"
-        // Esses devem SEMPRE passar (não aplicar filtro de período)
-        const hasScheduledDate = t.scheduledDate || (t.status === TicketStatus.DONE && t.completedDate);
+        // Task 3: EXCEÇÃO - Tickets atrasados SEMPRE passam no filtro de período
+        const isOverdue = isTicketOverdueInScope(t);
+        if (isOverdue) {
+          // Ticket atrasado sempre passa, independente do período
+        } else {
+          // Aplicar filtro de período normal para tickets não atrasados
+          // Tickets sem scheduledDate e não-concluídos vão para "Aguardando Agendamento"
+          // Esses devem SEMPRE passar (não aplicar filtro de período)
+          const hasScheduledDate = t.scheduledDate || (t.status === TicketStatus.DONE && t.completedDate);
 
-        if (hasScheduledDate) {
-          // Tem data: aplicar filtro de período
-          const ticketDate = new Date(t.completedDate || t.scheduledDate || t.desiredDate || t.createdAt);
-          ticketDate.setHours(0, 0, 0, 0);
+          if (hasScheduledDate) {
+            // Tem data: aplicar filtro de período
+            const ticketDate = new Date(t.completedDate || t.scheduledDate || t.desiredDate || t.createdAt);
+            ticketDate.setHours(0, 0, 0, 0);
 
-          // Intervalo half-open: [start, endExclusive)
-          if (ticketDate < periodStartDate || ticketDate >= periodEndDate) {
-            return false;
+            // Intervalo half-open: [start, endExclusive)
+            if (ticketDate < periodStartDate || ticketDate >= periodEndDate) {
+              return false;
+            }
           }
+          // Sem data agendada: sempre passa (vai para "Aguardando Agendamento")
         }
-        // Sem data agendada: sempre passa (vai para "Aguardando Agendamento")
       }
 
       return matchesSearch && matchesStatus && matchesAssignee && matchesProperty && matchesType && matchesStatusFilter;
@@ -318,6 +368,7 @@ export function useMaintenanceFilters({
 
     const groups: MaintenanceGroup[] = [];
     const unscheduled: MaintenanceItem[] = [];
+    const overdue: MaintenanceItem[] = []; // Task 3: Grupo de atrasados
     const scheduledMap: Record<string, MaintenanceItem[]> = {};
 
     // Verificar se deve mostrar checkouts (se array vazio ou contém 'checkout')
@@ -333,11 +384,55 @@ export function useMaintenanceFilters({
       }
     });
 
+    // Task 3: Função para detectar tickets atrasados
+    const isTicketOverdueInScope = (ticket: Ticket): boolean => {
+      // Tickets concluídos nunca estão atrasados
+      if (ticket.status === TicketStatus.DONE) return false;
+      
+      // Pegar a data limite (prioridade: scheduledDate > desiredDate)
+      const deadline = ticket.scheduledDate || ticket.desiredDate;
+      if (!deadline) return false;
+      
+      // Marco temporal: "a partir de hoje" para evitar backlog antigo
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Verificar se o ticket foi criado/agendado "a partir de hoje"
+      const ticketDate = new Date(ticket.createdAt);
+      ticketDate.setHours(0, 0, 0, 0);
+      
+      const scheduledDateForScope = new Date(deadline);
+      scheduledDateForScope.setHours(0, 0, 0, 0);
+      
+      // Considerar apenas tickets criados hoje ou no futuro, OU com data desejada >= hoje
+      const isWithinScope = ticketDate >= today || scheduledDateForScope >= today;
+      if (!isWithinScope) return false;
+      
+      // Comparar deadline com agora (MANTENDO HORÁRIO ESPECÍFICO)
+      const now = new Date();
+      const deadlineDate = new Date(deadline);
+      
+      // Se a deadline tem horário específico (não é meia-noite), manter horário na comparação
+      const hasSpecificTime = deadlineDate.getHours() !== 0 || deadlineDate.getMinutes() !== 0;
+      
+      if (!hasSpecificTime) {
+        // Sem horário específico: comparar apenas datas (zerar horas)
+        now.setHours(0, 0, 0, 0);
+        deadlineDate.setHours(0, 0, 0, 0);
+      }
+      
+      return deadlineDate < now;
+    };
+
     // Adicionar tickets aos grupos (incluindo tickets de checkout reais)
     if (shouldShowTickets) {
       filteredTickets.forEach(t => {
-        // Incluir TODOS os tickets, inclusive checkouts reais
-        if (t.scheduledDate || (t.status === TicketStatus.DONE && t.completedDate)) {
+        // Task 3: Verificar se o ticket está atrasado primeiro
+        if (isTicketOverdueInScope(t)) {
+          overdue.push(t);
+        }
+        // Incluir TODOS os tickets, inclusive checkouts reais (se não atrasados)
+        else if (t.scheduledDate || (t.status === TicketStatus.DONE && t.completedDate)) {
           const dateStr = t.scheduledDate || t.completedDate;
           const dateKey = dateStr!.split('T')[0];
           if (!scheduledMap[dateKey]) scheduledMap[dateKey] = [];
@@ -392,7 +487,14 @@ export function useMaintenanceFilters({
             r.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             r.propertyCode.toLowerCase().includes(searchTerm.toLowerCase());
 
-          const matchesProperty = filterMaintenanceProperty === 'all' || r.propertyCode === filterMaintenanceProperty;
+          // Filtro por propriedade - SUPORTA STRING OU ARRAY
+          let matchesProperty = true;
+          if (Array.isArray(filterMaintenanceProperty)) {
+            matchesProperty = filterMaintenanceProperty.length === 0 || 
+                              filterMaintenanceProperty.includes(r.propertyCode);
+          } else {
+            matchesProperty = filterMaintenanceProperty === 'all' || r.propertyCode === filterMaintenanceProperty;
+          }
 
           // Filtro por responsável: checkouts virtuais NÃO têm assignee
           // Se filtro de assignee está ativo (array não vazio), excluir checkouts virtuais
@@ -409,6 +511,26 @@ export function useMaintenanceFilters({
             scheduledMap[dateKey].push(checkoutItem);
           }
         }
+      });
+    }
+
+    // Task 3: Preparar grupo "Atrasados" (se houver) - SEMPRE no topo
+    const overdueGroup: MaintenanceGroup[] = [];
+    if (overdue.length > 0) {
+      // Ordenar atrasados por antiguidade (mais antigos primeiro)
+      const sortedOverdue = overdue.sort((a, b) => {
+        if ('scheduledDate' in a && 'scheduledDate' in b) {
+          const dateA = new Date(a.scheduledDate || a.desiredDate).getTime();
+          const dateB = new Date(b.scheduledDate || b.desiredDate).getTime();
+          return dateA - dateB; // Mais antigos primeiro
+        }
+        return 0;
+      });
+      overdueGroup.push({
+        id: 'overdue',
+        label: 'Atrasados',
+        items: sortedOverdue,
+        isBacklog: false // Não é backlog, é seção especial
       });
     }
 
@@ -443,13 +565,16 @@ export function useMaintenanceFilters({
       dateGroups.push({ id: key, label: label, date: key, items: scheduledMap[key] });
     });
 
-    // Aplicar ordenação inteligente
-    return orderMaintenanceGroups({
+    // Task 3: Aplicar ordenação inteligente com grupo de atrasados sempre no topo
+    const orderedGroups = orderMaintenanceGroups({
       dateGroups,
       backlogGroup,
       periodPreset,
       shouldFilterByPeriod,
     });
+    
+    // Inserir grupo de atrasados no início (se existir)
+    return [...overdueGroup, ...orderedGroups];
   }, [filteredTickets, staysReservations, activeModule, filterMaintenanceType, searchTerm, filterMaintenanceProperty, periodStartDate, periodEndDate, shouldFilterByPeriod, periodPreset, maintenanceOverrides, maintenanceStatusFilter]);
 
   const upcomingCheckouts = useMemo(() => {

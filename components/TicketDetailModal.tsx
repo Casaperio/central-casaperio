@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Ticket, TicketStatus, User } from '../types';
-import { X, Calendar, User as UserIcon, Clock, CheckCircle2, AlertTriangle, FileText, Shield, DollarSign, Plus, Trash2, ChevronLeft, LogOut, MessageSquare, Navigation } from 'lucide-react';
-import { generateId, getValidAssignees, canTransitionStatus } from '../utils';
+import { Ticket, TicketStatus, User, Reservation } from '../types';
+import { X, Calendar, User as UserIcon, Clock, CheckCircle2, AlertTriangle, FileText, Shield, DollarSign, Plus, Trash2, ChevronLeft, LogOut, MessageSquare, Navigation, LogIn } from 'lucide-react';
+import { generateId, getValidAssignees, canTransitionStatus, formatDateTimeCheckIn } from '../utils';
 import RatingStars from './shared/RatingStars';
 
 interface TicketDetailModalProps {
@@ -18,9 +18,10 @@ interface TicketDetailModalProps {
  onSaveProblemReport: (ticketId: string, text: string, images: string[], userName: string) => void;
  allUsers: { name: string; role: string }[];
  currentUser?: User;
+ staysReservations?: Reservation[];
 }
 
-const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateStatus, onAssign, onAddExpense, onDeleteExpense, onDeleteTicket, onDismissCheckoutTicket, onSaveObservations, onSaveProblemReport, allUsers, currentUser }) => {
+const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateStatus, onAssign, onAddExpense, onDeleteExpense, onDeleteTicket, onDismissCheckoutTicket, onSaveObservations, onSaveProblemReport, allUsers, currentUser, staysReservations = [] }) => {
  const isUrgent = ticket.priority.toLowerCase().includes('urgente');
  const isVirtualTicket = (ticket as any)._isVirtual === true;
  const canSeeGuestRating = currentUser?.role === 'Maintenance' || currentUser?.role === 'Admin';
@@ -57,6 +58,52 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
  const [problemText, setProblemText] = useState(ticket.problemReport?.text || '');
  const [problemImages, setProblemImages] = useState<string[]>(ticket.problemReport?.images || []);
  const [showProblemForm, setShowProblemForm] = useState(false);
+
+ // Task 2 Sprint 3 (Corrected): Função helper para buscar reserva vinculada ao ticket
+ const getReservationForTicket = (): Reservation | null => {
+  if (staysReservations.length === 0) return null;
+  
+  // 1. Busca direta por reservationId (se existir)
+  if (ticket.reservationId) {
+   const reservation = staysReservations.find(
+    r => r.id === ticket.reservationId || r.externalId === ticket.reservationId
+   );
+   if (reservation) return reservation;
+  }
+  
+  // 2. Busca fallback por propertyCode + período de estadia
+  // Útil quando o ticket foi criado manualmente mas existe reserva ativa
+  const ticketDate = new Date(ticket.desiredDate || ticket.createdAt);
+  
+  const matchingReservations = staysReservations.filter(r => {
+   // Deve ser a mesma propriedade
+   if (r.propertyCode !== ticket.propertyCode) return false;
+   
+   // Verificar se a data do ticket está dentro do período de check-in/check-out
+   const checkIn = new Date(r.checkInDate);
+   const checkOut = new Date(r.checkOutDate);
+   
+   // Adicionar 1 dia de margem para cobrir tickets criados próximo ao checkout
+   const checkOutWithMargin = new Date(checkOut);
+   checkOutWithMargin.setDate(checkOutWithMargin.getDate() + 1);
+   
+   return ticketDate >= checkIn && ticketDate <= checkOutWithMargin;
+  });
+  
+  // Priorizar reservas IN-HOUSE (check-in já feito)
+  const inHouseReservation = matchingReservations.find(
+   r => r.status === 'Check-in' || (r.status as any) === 'CHECKIN'
+  );
+  
+  if (inHouseReservation) return inHouseReservation;
+  
+  // Se não houver IN-HOUSE, retornar a primeira confirmada
+  const confirmedReservation = matchingReservations.find(
+   r => r.status === 'Confirmada' || (r.status as any) === 'CONFIRMED'
+  );
+  
+  return confirmedReservation || matchingReservations[0] || null;
+ };
 
  const renderStatusBadge = (status: TicketStatus) => {
   switch (status) {
@@ -294,6 +341,48 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
        </div>
       )}
      </div>
+
+     {/* Task 2 Sprint 3 (Corrected): Exibir Check-in/Check-out da reserva vinculada */}
+     {(() => {
+      const linkedReservation = getReservationForTicket();
+      if (linkedReservation && linkedReservation.checkInDate && linkedReservation.checkOutDate) {
+       return (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+         <h3 className="text-sm font-semibold text-blue-800 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <Calendar size={14} className="text-blue-600" />
+          Estadia
+         </h3>
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Check-in */}
+          <div className="flex items-center gap-2 bg-white rounded-lg p-3 border border-green-200">
+           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100">
+            <LogIn size={16} className="text-green-600" />
+           </div>
+           <div className="flex flex-col">
+            <span className="text-xs font-medium text-gray-500 uppercase">Check-in</span>
+            <span className="text-sm font-bold text-gray-900">
+             {formatDateTimeCheckIn(linkedReservation.checkInDate, linkedReservation.checkInTime)}
+            </span>
+           </div>
+          </div>
+          {/* Check-out */}
+          <div className="flex items-center gap-2 bg-white rounded-lg p-3 border border-orange-200">
+           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-orange-100">
+            <LogOut size={16} className="text-orange-600" />
+           </div>
+           <div className="flex flex-col">
+            <span className="text-xs font-medium text-gray-500 uppercase">Check-out</span>
+            <span className="text-sm font-bold text-gray-900">
+             {formatDateTimeCheckIn(linkedReservation.checkOutDate, linkedReservation.checkOutTime)}
+            </span>
+           </div>
+          </div>
+         </div>
+        </div>
+       );
+      }
+      return null;
+     })()}
 
      {/* Description */}
      <div>

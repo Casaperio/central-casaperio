@@ -4,12 +4,13 @@ import {
   CalendarClock, CalendarRange, LogIn, LogOut as LogOutIcon, Home, Languages,
   FileX, EyeOff, DollarSign, Wrench, Repeat, FileCheck, CheckCircle2, AlertCircle, Baby, Flag
 } from 'lucide-react';
-import { Reservation, Ticket } from '../../types';
+import { Reservation, Ticket, Property } from '../../types';
 import { AgendaGroup } from '../../services/staysDataMapper';
 import { SkeletonAgenda, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import PeriodFilter, { PeriodPreset } from './PeriodFilter';
 import StatusFilter, { ReservationStatus } from './StatusFilter';
+import { PropertyFilter } from './PropertyFilter'; // NOVO: Filtro de Propriedades
 import { useGuestPeriodFilter } from '../../hooks/features/useGuestPeriodFilter';
 import { usePagination } from '../../hooks/features/usePagination';
 import { PaginationBar } from '../ui/PaginationBar';
@@ -32,9 +33,12 @@ interface GuestViewProps {
   guestCustomStartDate: string;
   guestCustomEndDate: string;
   guestSelectedStatuses: string[];
+  guestSelectedProperties: string[]; // NOVO: Propriedades selecionadas
+  properties: Property[]; // NOVO: Lista de propriedades
   onGuestPeriodPresetChange: (preset: PeriodPreset) => void;
   onGuestCustomDateChange: (startDate: string, endDate: string) => void;
   onGuestStatusChange: (statuses: string[]) => void;
+  onGuestPropertyChange: (properties: string[]) => void; // NOVO: Callback de mudança de propriedades
 }
 
 // Normaliza o nome do hóspede para consistência na contagem
@@ -62,9 +66,12 @@ export const GuestView: React.FC<GuestViewProps> = ({
   guestCustomStartDate,
   guestCustomEndDate,
   guestSelectedStatuses,
+  guestSelectedProperties, // NOVO
+  properties, // NOVO
   onGuestPeriodPresetChange,
   onGuestCustomDateChange,
-  onGuestStatusChange
+  onGuestStatusChange,
+  onGuestPropertyChange // NOVO
 }) => {
   const getGridClass = () => {
     if (gridColumns === 2) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2';
@@ -80,11 +87,12 @@ export const GuestView: React.FC<GuestViewProps> = ({
     customStartDate: guestCustomStartDate,
     customEndDate: guestCustomEndDate,
     selectedStatuses: guestSelectedStatuses,
+    selectedProperties: guestSelectedProperties, // NOVO
     searchTerm,
   });
 
   // Paginação: reset quando filtros mudarem
-  const resetTrigger = `${guestPeriodPreset}-${guestCustomStartDate}-${guestCustomEndDate}-${guestSelectedStatuses.join(',')}-${searchTerm}`;
+  const resetTrigger = `${guestPeriodPreset}-${guestCustomStartDate}-${guestCustomEndDate}-${guestSelectedStatuses.join(',')}-${guestSelectedProperties.join(',')}-${searchTerm}`;
   const { paginatedItems: paginatedAgendaGroups, pagination } = usePagination({
     items: filteredAgendaGroups,
     initialItemsPerPage: 10,
@@ -173,10 +181,22 @@ export const GuestView: React.FC<GuestViewProps> = ({
             onPresetChange={onGuestPeriodPresetChange}
             onCustomDateChange={onGuestCustomDateChange}
           />
-          <StatusFilter
-            selectedStatuses={guestSelectedStatuses as ReservationStatus[]}
-            onStatusChange={(statuses) => onGuestStatusChange(statuses as string[])}
-          />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-stretch">
+            <div className="w-full">
+              <StatusFilter
+                selectedStatuses={guestSelectedStatuses as ReservationStatus[]}
+                onStatusChange={(statuses) => onGuestStatusChange(statuses as string[])}
+              />
+            </div>
+            <div className="w-full">
+              <PropertyFilter
+                selectedProperties={guestSelectedProperties}
+                setSelectedProperties={onGuestPropertyChange}
+                properties={properties}
+                variant="panel"
+              />
+            </div>
+          </div>
         </>
       )}
 
