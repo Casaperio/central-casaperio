@@ -52,7 +52,7 @@ interface MaintenanceViewProps {
   isLoading?: boolean;
 }
 
-// Função para detectar chamados atrasados
+// Função para detectar chamados atrasados (Task 3)
 const isTicketOverdue = (ticket: Ticket): boolean => {
   // Tickets concluídos nunca estão atrasados
   if (ticket.status === TicketStatus.DONE) return false;
@@ -61,12 +61,33 @@ const isTicketOverdue = (ticket: Ticket): boolean => {
   const deadline = ticket.scheduledDate || ticket.desiredDate;
   if (!deadline) return false;
   
-  // Comparar com data atual (sem hora)
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
+  // Marco temporal: "a partir de hoje" para evitar backlog antigo
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   
+  // Verificar se o ticket foi criado/agendado "a partir de hoje"
+  const ticketDate = new Date(ticket.createdAt);
+  ticketDate.setHours(0, 0, 0, 0);
+  
+  const scheduledDateForScope = new Date(deadline);
+  scheduledDateForScope.setHours(0, 0, 0, 0);
+  
+  // Considerar apenas tickets criados hoje ou no futuro, OU com data desejada >= hoje
+  const isWithinScope = ticketDate >= today || scheduledDateForScope >= today;
+  if (!isWithinScope) return false;
+  
+  // Comparar deadline com agora (MANTENDO HORÁRIO ESPECÍFICO)
+  const now = new Date();
   const deadlineDate = new Date(deadline);
-  deadlineDate.setHours(0, 0, 0, 0);
+  
+  // Se a deadline tem horário específico (não é meia-noite), manter horário na comparação
+  const hasSpecificTime = deadlineDate.getHours() !== 0 || deadlineDate.getMinutes() !== 0;
+  
+  if (!hasSpecificTime) {
+    // Sem horário específico: comparar apenas datas (zerar horas)
+    now.setHours(0, 0, 0, 0);
+    deadlineDate.setHours(0, 0, 0, 0);
+  }
   
   return deadlineDate < now;
 };
@@ -279,8 +300,13 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
           ) : (
             maintenanceGroups.map((group) => (
               <div key={group.id} className="animate-fade-in">
-                <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${group.isBacklog ? 'text-orange-600' : activeModule === 'concierge' ? 'text-purple-600' : 'text-brand-600'}`}>
-                  {group.isBacklog ? <AlertCircle size={16}/> : <CalendarClock size={16}/>}
+                <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${
+                  group.id === 'overdue' ? 'text-red-600' : // Task 3: Estilo especial para atrasados
+                  group.isBacklog ? 'text-orange-600' : 
+                  activeModule === 'concierge' ? 'text-purple-600' : 'text-brand-600'
+                }`}>
+                  {group.id === 'overdue' ? <AlertCircle size={16}/> : // Task 3: Ícone especial para atrasados
+                   group.isBacklog ? <AlertCircle size={16}/> : <CalendarClock size={16}/>}
                   {group.label}
                   {group.date && <span className="ml-2 text-xs font-normal text-gray-400">{formatDatePtBR(group.date)}</span>}
                 </h3>
@@ -351,17 +377,33 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                           'border-gray-200 bg-white'
                         }`}
                       >
-                        {/* TAG ATRASADO - Prioridade máxima */}
+                        {/* TAG ATRASADO - Prioridade máxima (superior esquerdo) */}
                         {isOverdue && (
-                          <span className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider shadow-lg animate-pulse flex items-center gap-1 z-10">
+                          <span className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider shadow-lg animate-pulse flex items-center gap-1 z-20">
                             ⚠️ ATRASADO
                           </span>
                         )}
                         
-                        {/* Tags de tipo (movidas para não sobrepor ATRASADO) */}
-                        {ticket.isCheckoutTicket && <div className="absolute top-0 right-0 bg-violet-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider flex items-center gap-1 shadow-sm"><LogOutIcon size={10} /> CHECKOUT</div>}
-                        {ticket.isGuestRequest && !ticket.isCheckoutTicket && <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider">Hóspede</div>}
-                        {ticket.isPreventive && !ticket.isCheckoutTicket && <div className="absolute top-0 right-0 bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider flex items-center gap-1">PREVENTIVA</div>}
+                        {/* Tags de tipo (movidas para direita superior, evitando conflito) */}
+                        {ticket.isCheckoutTicket && !isOverdue && <div className="absolute top-0 right-0 bg-violet-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider flex items-center gap-1 shadow-sm z-10"><LogOutIcon size={10} /> CHECKOUT</div>}
+                        {ticket.isGuestRequest && !ticket.isCheckoutTicket && !isOverdue && <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider z-10">Hóspede</div>}
+                        {ticket.isPreventive && !ticket.isCheckoutTicket && !isOverdue && <div className="absolute top-0 right-0 bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider flex items-center gap-1 z-10">PREVENTIVA</div>}
+                        {/* Quando atrasado, mostrar tipo como badge menor à direita da tag ATRASADO */}
+                        {isOverdue && ticket.isCheckoutTicket && (
+                          <div className="absolute top-2 right-2 bg-violet-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider z-10">
+                            CHECKOUT
+                          </div>
+                        )}
+                        {isOverdue && ticket.isGuestRequest && !ticket.isCheckoutTicket && (
+                          <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider z-10">
+                            HÓSPEDE
+                          </div>
+                        )}
+                        {isOverdue && ticket.isPreventive && !ticket.isCheckoutTicket && (
+                          <div className="absolute top-2 right-2 bg-blue-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider z-10">
+                            PREV
+                          </div>
+                        )}
 
                         {/* Container de tags com dois grupos: esquerdo (Status/Prioridade) e direito (Problema/Observações) */}
                         <div className="flex items-start justify-between mt-2 mb-2 gap-2">
