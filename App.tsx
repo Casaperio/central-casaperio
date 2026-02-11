@@ -1123,6 +1123,7 @@ function AppContent() {
         settings={settings}
         activeModule={activeModule}
         reservations={reservations}
+        staysReservations={staysReservations}
         currentUser={currentUser}
         addLog={addLog}
         addNotification={addNotification}

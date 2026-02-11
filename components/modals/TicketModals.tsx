@@ -34,6 +34,7 @@ interface TicketModalsProps {
  };
  activeModule: AppModule | null;
  reservations: Reservation[];
+ staysReservations?: Reservation[];
  currentUser: User;
  addLog: (action: string, details: string) => void;
  addNotification: (title: string, message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
@@ -57,6 +58,7 @@ const TicketModals: React.FC<TicketModalsProps> = ({
  settings,
  activeModule,
  reservations,
+ staysReservations = [],
  currentUser,
  addLog,
  addNotification,
@@ -550,6 +552,7 @@ const TicketModals: React.FC<TicketModalsProps> = ({
      onSaveProblemReport={handleSaveProblemReport}
      allUsers={users}
      currentUser={currentUser}
+     staysReservations={staysReservations}
     />
    )}
   </>

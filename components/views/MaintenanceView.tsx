@@ -531,9 +531,11 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                           {ticket.status}
                         </div>
 
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{ticket.propertyCode}</span>
-                          <p className="text-xs text-gray-500 truncate max-w-[200px]">{ticket.description}</p>
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{ticket.propertyCode}</span>
+                            <p className="text-xs text-gray-500 truncate max-w-[200px]">{ticket.description}</p>
+                          </div>
                         </div>
                       </div>
 

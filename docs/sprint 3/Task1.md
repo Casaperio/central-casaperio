@@ -31,54 +31,55 @@ O cliente quer filtrar a visualização por **imóvel** em dois módulos: **Manu
 - [ ] No mobile fica utilizável (dropdown não quebra layout; seleção/limpar acessíveis).
 - [ ] Sem seleção = comportamento atual (não filtra).
 - [ ] Não impacta negativamente performance (sem refetch desnecessário; respeitar debounce quando aplicável).
----
 
-## ✅ Implementação (preencher ao finalizar)
+**## ✅ Implementação (preencher ao finalizar)**
 
 ### **Causa/Contexto técnico:**
 
-O sistema já possuía filtros multi-select para **Tipo** e **Responsável** no módulo Manutenção, mas não havia filtro por **Imóvel**. O módulo Guest & CRM também não possuía filtro de imóveis. Os dados de propriedades já estavam disponíveis no App através do hook `usePropertiesData`, que carrega os imóveis do MongoDB (fonte de verdade: Stays API).
+O sistema já possuía filtros multi-select para **Tipo** e **Responsável** no módulo Manutenção, mas não havia filtro por **Imóvel**. O módulo Guest & CRM também não possuía filtro de imóveis. Os dados de propriedades já estavam disponíveis no App através do hook **``**usePropertiesData**``**, que carrega os imóveis do MongoDB (fonte de verdade: Stays API).
 
 ### **Solução aplicada:**
 
-1. **Componente reutilizável PropertyFilter**: Criado seguindo o padrão do `AssigneeFilter`, com funcionalidades de:
+1. **Componente reutilizável PropertyFilter**: Criado seguindo o padrão do **``**AssigneeFilter**``**, com funcionalidades de:
+
    - Multi-select com checkboxes
    - Barra de busca integrada no dropdown
    - Contador de selecionados
    - Botão de limpar seleção
    - Layout responsivo (flex com min/max widths)
-
 2. **Atualização de estados e tipos**:
-   - Alterado `filterMaintenanceProperty` de `string` para `string[]` no App.tsx
-   - Atualizado `resetTrigger` para incluir join do array de propriedades
-   - Adicionado `guestSelectedProperties` como novo estado no App.tsx
 
+   - Alterado **``**filterMaintenanceProperty**``** de **``**string**``** para **``**string[]**``** no App.tsx
+   - Atualizado **``**resetTrigger**``** para incluir join do array de propriedades
+   - Adicionado **``**guestSelectedProperties**``** como novo estado no App.tsx
 3. **Hooks atualizados**:
-   - `useMaintenanceFilters`: Atualizada interface e lógica de filtro para suportar array de propriedades (multi-select) com backward compatibility
-   - `useMaintenanceCalendar`: Suporte a array de propriedades
-   - `useGuestPeriodFilter`: Adicionado parâmetro `selectedProperties` e lógica de filtro
 
+   - **``**useMaintenanceFilters**``**: Atualizada interface e lógica de filtro para suportar array de propriedades (multi-select) com backward compatibility
+   - **``**useMaintenanceCalendar**``**: Suporte a array de propriedades
+   - **``**useGuestPeriodFilter**``**: Adicionado parâmetro **``**selectedProperties**``** e lógica de filtro
 4. **Integração nos componentes**:
-   - `MaintenanceView`: Adicionado PropertyFilter na linha de filtros, passando properties e setter
-   - `GuestView`: Adicionado PropertyFilter em layout flex com StatusFilter, passando properties e handler
+
+   - **``**MaintenanceView**``**: Adicionado PropertyFilter na linha de filtros, passando properties e setter
+   - **``**GuestView**``**: Adicionado PropertyFilter em layout flex com StatusFilter, passando properties e handler
 
 ### **Arquivos alterados:**
 
 - **Novos:**
-  - `components/views/PropertyFilter.tsx` (componente reutilizável)
 
+  - **``**components/views/PropertyFilter.tsx**``** (componente reutilizável)
 - **Modificados:**
-  - `App.tsx`: Estados de filtro, handlers e props passadas para views
-  - `hooks/features/useMaintenanceFilters.ts`: Interface e lógica multi-select
-  - `hooks/features/useMaintenanceCalendar.ts`: Interface e lógica multi-select
-  - `hooks/features/useGuestPeriodFilter.ts`: Adicionado filtro de propriedades
-  - `components/views/MaintenanceView.tsx`: Import, props e renderização do PropertyFilter
-  - `components/views/GuestView.tsx`: Import, props e renderização do PropertyFilter
+
+  - **``**App.tsx**``**: Estados de filtro, handlers e props passadas para views
+  - **``**hooks/features/useMaintenanceFilters.ts**``**: Interface e lógica multi-select
+  - **``**hooks/features/useMaintenanceCalendar.ts**``**: Interface e lógica multi-select
+  - **``**hooks/features/useGuestPeriodFilter.ts**``**: Adicionado filtro de propriedades
+  - **``**components/views/MaintenanceView.tsx**``**: Import, props e renderização do PropertyFilter
+  - **``**components/views/GuestView.tsx**``**: Import, props e renderização do PropertyFilter
 
 ### **Regras/Helpers criados ou ajustados:**
 
-- **Backward compatibility**: A lógica de filtro suporta tanto `string` (antigo) quanto `string[]` (novo), garantindo que componentes ainda não migrados continuem funcionando
-- **Filtro vazio = todos**: Quando `selectedProperties.length === 0`, não aplica filtro (mostra todos os imóveis)
+- **Backward compatibility**: A lógica de filtro suporta tanto **``**string**``** (antigo) quanto **``**string[]**``** (novo), garantindo que componentes ainda não migrados continuem funcionando
+- **Filtro vazio = todos**: Quando **``**selectedProperties.length === 0**``**, não aplica filtro (mostra todos os imóveis)
 - **Interseção de filtros**: O filtro de propriedade funciona em conjunto com período, tipo, responsável e status (AND lógico)
 
 ### **Impactos e compatibilidade:**
@@ -92,6 +93,7 @@ O sistema já possuía filtros multi-select para **Tipo** e **Responsável** no 
 ### **Como testar (passo a passo):**
 
 **Módulo Manutenção:**
+
 1. Acessar **Manutenção** (modo cards ou lista)
 2. Localizar o filtro ''Filtrar por Imóvel'' na linha de filtros (ao lado de Tipo e Responsável)
 3. Clicar no dropdown e verificar:
@@ -106,6 +108,7 @@ O sistema já possuía filtros multi-select para **Tipo** e **Responsável** no 
 5. Testar no mobile (layout responsivo, dropdown não quebra)
 
 **Módulo Guest & CRM:**
+
 1. Acessar **Guest & CRM** (modo cards ou lista)
 2. Localizar o filtro ''Filtrar por Imóvel'' (abaixo do filtro de status, em flex horizontal)
 3. Repetir testes do Manutenção (busca, multi-select, limpar)
@@ -113,6 +116,7 @@ O sistema já possuía filtros multi-select para **Tipo** e **Responsável** no 
 5. Testar combinação com filtros de período e status
 
 **Casos de borda:**
+
 - Sem seleção = mostra todos os imóveis (comportamento padrão)
 - Busca sem resultados = mensagem ''Nenhum imóvel encontrado''
 - Limpar seleção retorna ao estado inicial
@@ -120,7 +124,7 @@ O sistema já possuía filtros multi-select para **Tipo** e **Responsável** no 
 
 ### **Observações:**
 
-- A lista de propriedades vem do hook `usePropertiesData`, que já carrega os dados do MongoDB (sincronizado com Stays API)
+- A lista de propriedades vem do hook **``**usePropertiesData**``**, que já carrega os dados do MongoDB (sincronizado com Stays API)
 - O filtro não persiste entre sessões (estado local do React), mas poderia ser facilmente estendido com localStorage se necessário
 - Performance: Não há impacto negativo, pois a filtragem é feita em memória sobre dados já carregados
 - Acessibilidade: O dropdown fecha ao clicar fora (via useEffect com mousedown listener)

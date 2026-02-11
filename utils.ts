@@ -81,6 +81,41 @@ export const formatDatePtBR = (date: Date | number | string, options?: Intl.Date
 };
 
 /**
+ * Format time to HH:mm format in Brazil timezone
+ * Usado para exibir check-in/check-out times
+ */
+export const formatTimeBrazil = (time?: string | null): string => {
+  if (!time) return '--:--';
+
+  // Se já está no formato HH:mm, retornar direto
+  if (/^\d{2}:\d{2}/.test(time)) {
+    return time.slice(0, 5);
+  }
+
+  // Se for ISO string ou timestamp, parsear e formatar
+  const parsed = new Date(time);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleTimeString('pt-BR', {
+      timeZone: BRAZIL_TZ,
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  return time;
+};
+
+/**
+ * Format date and time together: dd/mm/yyyy HH:mm
+ * Usado para exibir check-in/check-out completo nos cards de Manutenção
+ */
+export const formatDateTimeCheckIn = (date: string, time?: string): string => {
+  const dateFormatted = formatDatePtBR(date);
+  const timeFormatted = formatTimeBrazil(time);
+  return `${dateFormatted} ${timeFormatted}`;
+};
+
+/**
  * Format currency to BRL with thousands separator
  */
 export const formatCurrency = (amount: number): string => {
