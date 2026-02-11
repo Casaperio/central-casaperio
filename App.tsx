@@ -301,7 +301,7 @@ function AppContent() {
   
   // Maintenance Specific Filters
   const [filterMaintenanceAssignee, setFilterMaintenanceAssignee] = useState<string[]>([]);
-  const [filterMaintenanceProperty, setFilterMaintenanceProperty] = useState<string>('all');
+  const [filterMaintenanceProperty, setFilterMaintenanceProperty] = useState<string[]>([]);
   const [filterMaintenanceType, setFilterMaintenanceType] = useState<string[]>([]);
   const [maintenanceStatusFilter, setMaintenanceStatusFilter] = useState<'all' | 'in_progress'>('all');
 
@@ -317,6 +317,9 @@ function AppContent() {
 
   // Guest Status Filter (default: ['ALL'] - todos os status)
   const [guestSelectedStatuses, setGuestSelectedStatuses] = useState<string[]>(['ALL']);
+
+  // Guest Property Filter (default: [] - todos os imóveis)
+  const [guestSelectedProperties, setGuestSelectedProperties] = useState<string[]>([]);
 
   // Task 2: Período dinâmico para calendário - expande conforme navegação
   const [calendarVisibleStart, setCalendarVisibleStart] = useState<Date>(() => {
@@ -747,7 +750,7 @@ function AppContent() {
   });
 
   // Maintenance Pagination Hook
-  const resetTrigger = `${searchTerm}-${filterStatus}-${filterMaintenanceAssignee.join(',')}-${filterMaintenanceProperty}-${filterMaintenanceType}-${maintenanceStatusFilter}-${periodPreset}-${customStartDate}-${customEndDate}`;
+  const resetTrigger = `${searchTerm}-${filterStatus}-${filterMaintenanceAssignee.join(',')}-${filterMaintenanceProperty.join(',')}-${filterMaintenanceType.join(',')}-${maintenanceStatusFilter}-${periodPreset}-${customStartDate}-${customEndDate}`;
   const {
     paginatedGroups,
     hasMore: hasMoreMaintenanceItems,
@@ -1009,6 +1012,7 @@ function AppContent() {
                 filterMaintenanceAssignee={filterMaintenanceAssignee}
                 setFilterMaintenanceAssignee={setFilterMaintenanceAssignee}
                 filterMaintenanceProperty={filterMaintenanceProperty}
+                setFilterMaintenanceProperty={setFilterMaintenanceProperty}
                 filterMaintenanceType={filterMaintenanceType}
                 setFilterMaintenanceType={setFilterMaintenanceType}
                 maintenanceStatusFilter={maintenanceStatusFilter}
@@ -1027,6 +1031,7 @@ function AppContent() {
                 staysReservations={staysReservations}
                 maintenanceOverrides={maintenanceOverrides}
                 allUsers={users}
+                properties={properties}
                 currentUser={currentUser}
                 isLoading={staysLoading}
               />
@@ -1049,9 +1054,12 @@ function AppContent() {
                guestCustomStartDate={guestCustomStartDate}
                guestCustomEndDate={guestCustomEndDate}
                guestSelectedStatuses={guestSelectedStatuses}
+               guestSelectedProperties={guestSelectedProperties}
+               properties={properties}
                onGuestPeriodPresetChange={handleGuestPeriodPresetChange}
                onGuestCustomDateChange={handleGuestCustomDateChange}
                onGuestStatusChange={setGuestSelectedStatuses}
+               onGuestPropertyChange={setGuestSelectedProperties}
              />
            )}
 

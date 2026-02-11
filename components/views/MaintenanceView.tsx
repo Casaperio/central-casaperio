@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertCircle, CalendarClock, LogOut as LogOutIcon, ChevronDown, MessageSquare, User } from 'lucide-react';
-import { Ticket, TicketStatus, AppModule, Reservation, UserWithPassword, User as AppUser } from '../../types';
+import { Ticket, TicketStatus, AppModule, Reservation, UserWithPassword, User as AppUser, Property } from '../../types';
 import RatingStars from '../shared/RatingStars';
 import { MaintenanceGroup, MaintenanceItem, PeriodPreset } from '../../hooks/features/useMaintenanceFilters';
 import { useMaintenanceCalendar } from '../../hooks/features/useMaintenanceCalendar';
@@ -8,6 +8,7 @@ import { SkeletonCard, SkeletonList } from '../SkeletonLoading';
 import CalendarView from '../CalendarView';
 import { TypeFilter } from './TypeFilter';
 import { AssigneeFilter } from './AssigneeFilter';
+import { PropertyFilter } from './PropertyFilter'; // NOVO: Filtro de Imóveis
 import { MaintenanceStatusFilter } from './MaintenanceStatusFilter';
 import PeriodFilter from './PeriodFilter';
 import { parseLocalDate, formatDatePtBR, isToday, isTomorrow } from '../../utils';
@@ -26,7 +27,8 @@ interface MaintenanceViewProps {
   filterStatus: string;
   filterMaintenanceAssignee: string[];
   setFilterMaintenanceAssignee: (assignees: string[]) => void;
-  filterMaintenanceProperty: string;
+  filterMaintenanceProperty: string | string[]; // SUPORTA STRING OU ARRAY
+  setFilterMaintenanceProperty: (properties: string[]) => void; // NOVO: setter para array
   filterMaintenanceType: string[];
   setFilterMaintenanceType: (types: string[]) => void;
   maintenanceStatusFilter: 'all' | 'in_progress';
@@ -45,6 +47,7 @@ interface MaintenanceViewProps {
   staysReservations?: Reservation[];
   maintenanceOverrides?: Record<string, { hidden: boolean; updatedAt: number }>;
   allUsers: UserWithPassword[];
+  properties: Property[]; // NOVO: Lista de imóveis para o filtro
   currentUser?: AppUser;
   isLoading?: boolean;
 }
@@ -81,6 +84,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   filterMaintenanceAssignee,
   setFilterMaintenanceAssignee,
   filterMaintenanceProperty,
+  setFilterMaintenanceProperty, // NOVO
   filterMaintenanceType,
   setFilterMaintenanceType,
   maintenanceStatusFilter,
@@ -99,6 +103,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   staysReservations = [],
   maintenanceOverrides = {},
   allUsers,
+  properties, // NOVO
   currentUser,
   isLoading = false
 }) => {
@@ -214,6 +219,13 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
               selectedAssignees={filterMaintenanceAssignee}
               setSelectedAssignees={setFilterMaintenanceAssignee}
               allUsers={allUsers}
+            />
+          </div>
+          <div className="w-full md:flex-1 md:min-w-[200px] md:max-w-[280px]">
+            <PropertyFilter
+              selectedProperties={Array.isArray(filterMaintenanceProperty) ? filterMaintenanceProperty : []}
+              setSelectedProperties={setFilterMaintenanceProperty}
+              properties={properties}
             />
           </div>
           <div className="w-full md:flex-1 md:min-w-[180px] md:max-w-[220px]">

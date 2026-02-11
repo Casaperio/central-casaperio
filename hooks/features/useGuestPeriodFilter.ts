@@ -11,7 +11,8 @@ interface UseGuestPeriodFilterProps {
   customStartDate?: string;
   customEndDate?: string;
   searchTerm?: string;
-  selectedStatuses?: string[]; // Novo: filtro de status
+  selectedStatuses?: string[]; // Filtro de status
+  selectedProperties?: string[]; // NOVO: Filtro por propriedades
 }
 
 /**
@@ -68,6 +69,7 @@ export function useGuestPeriodFilter({
   customEndDate = '',
   searchTerm = '',
   selectedStatuses = ['ALL'],
+  selectedProperties = [], // NOVO: array de códigos de propriedades selecionadas
 }: UseGuestPeriodFilterProps) {
 
   // Calcular intervalo de datas baseado no preset
@@ -186,19 +188,24 @@ export function useGuestPeriodFilter({
       console.log('  ℹ️ Sem filtro de status - mostrando todos os status');
     }
 
-    // 3. Aplicar busca (filtrar items dentro dos grupos)
-    if (searchTerm) {
+    // 3. Aplicar busca e filtro de propriedade (filtrar items dentro dos grupos)
+    if (searchTerm || selectedProperties.length > 0) {
       const term = searchTerm.toLowerCase();
-      console.log('  🔍 Aplicando busca:', term);
+      console.log('  🔍 Aplicando busca/filtro de propriedade:', { searchTerm: term, properties: selectedProperties });
       const searchedGroups = groups.map(group => ({
         ...group,
-        items: group.items.filter(r =>
-          r.guestName.toLowerCase().includes(term) ||
-          r.propertyCode.toLowerCase().includes(term) ||
-          r.channel?.toLowerCase().includes(term)
-        )
+        items: group.items.filter(r => {
+          const matchesSearch = !term || (
+            r.guestName.toLowerCase().includes(term) ||
+            r.propertyCode.toLowerCase().includes(term) ||
+            r.channel?.toLowerCase().includes(term)
+          );
+          const matchesProperty = selectedProperties.length === 0 ||
+                                   selectedProperties.includes(r.propertyCode);
+          return matchesSearch && matchesProperty;
+        })
       })).filter(group => group.items.length > 0);
-      console.log('  ✅ Grupos após busca:', searchedGroups.length);
+      console.log('  ✅ Grupos após busca/propriedade:', searchedGroups.length);
       groups = searchedGroups;
     }
 
@@ -215,7 +222,7 @@ export function useGuestPeriodFilter({
     }
 
     return groups;
-  }, [staysAgendaGroups, shouldFilterByPeriod, periodStartDate, periodEndDate, selectedStatuses, searchTerm]);
+  }, [staysAgendaGroups, shouldFilterByPeriod, periodStartDate, periodEndDate, selectedStatuses, selectedProperties, searchTerm]);
 
   return {
     filteredAgendaGroups,

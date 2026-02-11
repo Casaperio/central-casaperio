@@ -88,7 +88,7 @@ interface UseMaintenanceFiltersProps {
   searchTerm: string;
   filterStatus: string;
   filterMaintenanceAssignee: string | string[]; // Agora aceita string ou array
-  filterMaintenanceProperty: string;
+  filterMaintenanceProperty: string | string[]; // AGORA ACEITA STRING OU ARRAY
   filterMaintenanceType: string[];
   maintenanceStatusFilter?: 'all' | 'in_progress'; // NOVO: Filtro de status
   activeModule: string | null;
@@ -232,7 +232,16 @@ export function useMaintenanceFilters({
         matchesAssignee = filterMaintenanceAssignee === 'all' || t.assignee === filterMaintenanceAssignee;
       }
       
-      const matchesProperty = filterMaintenanceProperty === 'all' || t.propertyCode === filterMaintenanceProperty;
+      // Filtro por propriedade - AGORA SUPORTA STRING OU ARRAY
+      let matchesProperty = true;
+      if (Array.isArray(filterMaintenanceProperty)) {
+        // Multi-select: filtra se a propriedade está na lista OU se lista está vazia
+        matchesProperty = filterMaintenanceProperty.length === 0 || 
+                          filterMaintenanceProperty.includes(t.propertyCode);
+      } else {
+        // Backward compatibility: string simples
+        matchesProperty = filterMaintenanceProperty === 'all' || t.propertyCode === filterMaintenanceProperty;
+      }
 
       // Filtro por tipo (multi-seleção)
       let matchesType = true;
@@ -392,7 +401,14 @@ export function useMaintenanceFilters({
             r.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             r.propertyCode.toLowerCase().includes(searchTerm.toLowerCase());
 
-          const matchesProperty = filterMaintenanceProperty === 'all' || r.propertyCode === filterMaintenanceProperty;
+          // Filtro por propriedade - SUPORTA STRING OU ARRAY
+          let matchesProperty = true;
+          if (Array.isArray(filterMaintenanceProperty)) {
+            matchesProperty = filterMaintenanceProperty.length === 0 || 
+                              filterMaintenanceProperty.includes(r.propertyCode);
+          } else {
+            matchesProperty = filterMaintenanceProperty === 'all' || r.propertyCode === filterMaintenanceProperty;
+          }
 
           // Filtro por responsável: checkouts virtuais NÃO têm assignee
           // Se filtro de assignee está ativo (array não vazio), excluir checkouts virtuais

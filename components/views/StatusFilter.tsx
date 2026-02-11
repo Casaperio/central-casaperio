@@ -70,7 +70,7 @@ const StatusFilter: React.FC<StatusFilterProps> = ({
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 h-full">
       <div className="flex items-center gap-2 mb-3">
         <Filter size={18} className="text-gray-500" />
         <span className="text-sm font-medium text-gray-700">Status da Reserva</span>
