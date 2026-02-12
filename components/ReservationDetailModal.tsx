@@ -5,6 +5,7 @@ import { X, Calendar, User as UserIcon, ChevronLeft, ChevronDown, Plane, BedDoub
 import { checkFlightStatus } from '../services/geminiService';
 import { storageService } from '../services/storage';
 import { getReservationOverrideKey, formatDatePtBR } from '../utils';
+import GuestSummaryModal from './GuestSummaryModal';
 
 import { isAutomaticCheckoutTicket } from '../utils/ticketFilters';
 
@@ -57,6 +58,7 @@ const formatTimeBrazil = (time?: string | null): string => {
 const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reservation, currentUser, tickets = [], staysReservations = [], onCreateTicket, onClose, onUpdateDetails, onDelete, onDismissCheckout, onAddExpense, onDeleteExpense }) => {
 
  const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
+ const [showGuestSummaryModal, setShowGuestSummaryModal] = useState(false);
 
  // Calcula quantas reservas este hóspede já fez
  const guestReservationCount = useMemo(() => {
@@ -531,6 +533,7 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
  };
 
  return (
+  <>
   <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4 animate-in fade-in slide-in-from-bottom-5">
    <div className="bg-white w-full h-[100dvh] md:h-auto md:max-h-[90vh] md:max-w-2xl md:rounded-none shadow-2xl overflow-hidden flex flex-col">
     
@@ -603,15 +606,27 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
               <UserIcon size={24} />
             </div>
             <div className="flex-1">
-              <h3 className="text-lg font-bold text-gray-900">{reservation.guestName}</h3>
+              <button
+                type="button"
+                onClick={() => setShowGuestSummaryModal(true)}
+                className="text-left text-lg font-bold text-gray-900 decoration-blue-400 underline-offset-4 transition-colors hover:text-blue-700 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-400 rounded-sm"
+                title="Abrir resumo do hospede"
+              >
+                {reservation.guestName}
+              </button>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <p className="text-sm text-blue-700">
                   {reservation.guestCount} Hóspedes {reservation.hasBabies && <span className="text-xs bg-white px-2 py-0.5 rounded-full ml-2 border border-blue-200">👶 Bebê</span>}
                 </p>
                 {guestReservationCount > 0 && (
-                  <span className="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded border border-purple-200 text-purple-700 bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setShowGuestSummaryModal(true)}
+                    className="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded border border-purple-200 text-purple-700 bg-white transition-colors hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                    title="Ver historico e metricas deste hospede"
+                  >
                     <Repeat size={12} /> {guestReservationCount} {guestReservationCount === 1 ? 'reserva' : 'reservas'}
-                  </span>
+                  </button>
                 )}
               </div>
             </div>
@@ -1193,6 +1208,14 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
     </div>
    </div>
   </div>
+  {showGuestSummaryModal && (
+    <GuestSummaryModal
+      guestName={reservation.guestName}
+      staysReservations={staysReservations}
+      onClose={() => setShowGuestSummaryModal(false)}
+    />
+  )}
+  </>
  );
 };
 
