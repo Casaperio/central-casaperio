@@ -50,6 +50,20 @@ export const isToday = (date: string | Date): boolean => {
 };
 
 /**
+ * Task 6: Normaliza nome de hóspede para agrupamento consistente
+ * Remove acentos, converte para lowercase, normaliza espaços
+ * Garante que variações do mesmo nome sejam tratadas como único hóspede
+ */
+export const normalizeGuestName = (name: string): string => {
+  return name
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+    .replace(/\s+/g, ' '); // Normaliza múltiplos espaços em um só
+};
+
+/**
  * Verifica se uma data (string ou Date) é AMANHÃ no timezone do Brasil
  */
 export const isTomorrow = (date: string | Date): boolean => {

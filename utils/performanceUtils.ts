@@ -113,8 +113,7 @@ export function getDefaultPeriodForRoute(route: string, mode?: 'normal' | 'canva
   // Períodos por rota
   switch (route) {
     case 'maintenance':
-    case 'guest':
-      // Manutenção e Guest CRM: -7 dias até +30 dias
+      // Manutenção: -7 dias até +30 dias (período curto OK para manutenção)
       const maintenanceStart = new Date(today);
       maintenanceStart.setDate(maintenanceStart.getDate() - 7);
       const maintenanceEnd = new Date(today);
@@ -122,6 +121,19 @@ export function getDefaultPeriodForRoute(route: string, mode?: 'normal' | 'canva
       return {
         from: formatDate(maintenanceStart),
         to: formatDate(maintenanceEnd),
+      };
+
+    case 'guest':
+      // Guest CRM: PERÍODO AMPLO para cálculo correto de LTV e histórico completo
+      // Task 6: Corrigido de -7d/+30d para -2anos/+1ano
+      // Razão: CRM precisa de todo histórico para calcular LTV/estadias/noites corretamente
+      const guestStart = new Date(today);
+      guestStart.setFullYear(guestStart.getFullYear() - 2); // 2 anos atrás
+      const guestEnd = new Date(today);
+      guestEnd.setFullYear(guestEnd.getFullYear() + 1); // 1 ano à frente
+      return {
+        from: formatDate(guestStart),
+        to: formatDate(guestEnd),
       };
 
     case 'reservations':

@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Reservation, Ticket, GuestFeedback, ReservationStatus } from '../types';
 import {
@@ -8,8 +8,9 @@ import {
  Crown, Clock, ChevronRight, Phone, Mail, Filter, ArrowUpDown,
  LogIn, LogOut, Home, X, FileCheck, CheckCircle2, Baby, AlertCircle
 } from 'lucide-react';
-import { formatCurrency, parseLocalDate, formatDatePtBR, getTodayBrazil, isToday as checkIsToday, getMaintenanceItemKey, getReservationCardColors } from '../utils';
+import { formatCurrency, parseLocalDate, formatDatePtBR, getTodayBrazil, isToday as checkIsToday, getMaintenanceItemKey, getReservationCardColors, normalizeGuestName } from '../utils';
 import { getDetailedFinancials, getCalendar } from '../services/staysApiService';
+import { mapCalendarToReservations } from '../services/staysDataMapper';
 import { storageService } from '../services/storage';
 import { isAutomaticCheckoutTicket } from '../utils/ticketFilters';
 import ReservationDetailModal from './ReservationDetailModal';
@@ -72,8 +73,15 @@ const formatPhoneBR = (phone: string): string => {
 
 const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, currentUser = { role: '', name: '' }, maintenanceOverrides = {} }) => {
  const queryClient = useQueryClient();
- const [searchTerm, setSearchTerm] = useState('');
- const [selectedGuestName, setSelectedGuestName] = useState<string | null>(null);
+ const [searchTerm, setSearchTerm] = useState('');  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  // Debounce para busca
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]); const [selectedGuestName, setSelectedGuestName] = useState<string | null>(null);
  const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
 
  // Filter States
@@ -85,36 +93,70 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
  // Force refetch overrides (used to refresh after changes)
  const [refetchTrigger, setRefetchTrigger] = useState(0);
 
+ // Bugfix: CRM & Ciclo precisa de query própria com período amplo independente
+ // Para não depender de staysReservations que muda conforme navegação entre módulos
+ const [isModuleActive, setIsModuleActive] = useState(false);
+ 
+ useEffect(() => {
+   // Marca como ativo ao montar, inativo ao desmontar
+   setIsModuleActive(true);
+   return () => setIsModuleActive(false);
+ }, []);
+
+ // Query própria para reservations com período fixo (-2 anos / +1 ano)
+ const { data: ownCalendarData, isLoading: isLoadingOwnReservations } = useQuery({
+  queryKey: ['guest-crm-own-calendar-data'],
+  queryFn: async () => {
+    const today = new Date();
+    const twoYearsAgo = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate());
+    const oneYearAhead = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
+    const from = twoYearsAgo.toISOString().split('T')[0];
+    const to = oneYearAhead.toISOString().split('T')[0];
+    return getCalendar(from, to);
+  },
+  enabled: isModuleActive, // Só carrega quando módulo está ativo
+  staleTime: 10 * 60 * 1000, // 10 minutes
+ });
+
+ // Converter calendar para reservations
+ const ownReservations = useMemo(() => {
+   if (!ownCalendarData) return [];
+   return mapCalendarToReservations(ownCalendarData);
+ }, [ownCalendarData]);
+
+ // Usar ownReservations se disponível, senão fallback para prop (backwards compatibility)
+ const effectiveReservations = ownReservations.length > 0 ? ownReservations : reservations;
+
  // Filtrar reservas dispensadas (hidden)
  const filteredReservations = useMemo(() => {
-   return reservations.filter(res => {
+   return effectiveReservations.filter(res => {
      const checkoutItem = { type: 'checkout' as const, reservation: res };
      const itemKey = getMaintenanceItemKey(checkoutItem);
      const isHidden = maintenanceOverrides[itemKey]?.hidden;
      return !isHidden; // Não mostrar se estiver hidden
    });
- }, [reservations, maintenanceOverrides]);
+ }, [effectiveReservations, maintenanceOverrides]);
 
  // Fetch financial data from Stays API
+ // Task 6: Passar período amplo (-2 anos até +1 ano) para ter histórico completo de LTV
+ // Bugfix: Só carrega quando módulo está ativo
  const { data: financialData } = useQuery({
-  queryKey: ['stays-financial-detailed'],
-  queryFn: () => getDetailedFinancials(),
+  queryKey: ['guest-crm-financial-data'],
+  queryFn: () => {
+    const today = new Date();
+    const twoYearsAgo = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate());
+    const oneYearAhead = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
+    const from = twoYearsAgo.toISOString().split('T')[0];
+    const to = oneYearAhead.toISOString().split('T')[0];
+    return getDetailedFinancials(from, to);
+  },
+  enabled: isModuleActive,
   staleTime: 10 * 60 * 1000, // 10 minutes
  });
 
  // Fetch calendar data to get guest email and phone
- const { data: calendarData } = useQuery({
-  queryKey: ['stays-calendar-guest-contact'],
-  queryFn: async () => {
-    // Buscar últimos 2 anos de reservas para ter histórico completo
-    const today = new Date();
-    const twoYearsAgo = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate());
-    const from = twoYearsAgo.toISOString().split('T')[0];
-    const to = today.toISOString().split('T')[0];
-    return getCalendar(from, to);
-  },
-  staleTime: 10 * 60 * 1000, // 10 minutes
- });
+ // Bugfix: Reutilizar ownCalendarData em vez de query duplicada
+ const calendarData = ownCalendarData;
  
  // Fetch overrides for all reservations to show indicators
  const { data: reservationOverrides = {}, refetch: refetchOverrides } = useQuery({
@@ -154,12 +196,13 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
  }, [financialData]);
 
  // Create map of guestName -> {email, phone} for contact info
+ // Task 6: Usar normalizeGuestName para garantir match correto
  const guestContactMap = useMemo(() => {
   const map: Record<string, { email?: string; phone?: string }> = {};
   if (calendarData?.units) {
     calendarData.units.forEach(unit => {
       unit.reservations.forEach(res => {
-        const name = res.guestName.trim();
+        const name = normalizeGuestName(res.guestName);
         // Só adiciona se ainda não existe ou se tem mais informação
         if (!map[name] || (res.guestEmail && !map[name].email) || (res.guestPhone && !map[name].phone)) {
           map[name] = {
@@ -180,16 +223,16 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
 
   // 1. Process Reservations
   filteredReservations.forEach(res => {
-   // Normalize name
-   const name = res.guestName.trim();
-   if (!name || name === 'Hóspede (Stays)' || name === 'Bloqueio') return;
+   // Task 6: Normalize name usando função centralizada
+   const normalizedName = normalizeGuestName(res.guestName);
+   if (!normalizedName || normalizedName === 'hospede (stays)' || normalizedName === 'bloqueio') return;
 
-   if (!guestMap[name]) {
+   if (!guestMap[normalizedName]) {
     // Buscar email/phone do mapa de contatos da API
-    const contactInfo = guestContactMap[name] || {};
+    const contactInfo = guestContactMap[normalizedName] || {};
 
-    guestMap[name] = {
-     name,
+    guestMap[normalizedName] = {
+     name: res.guestName.trim(), // Manter nome original para exibição
      email: contactInfo.email,
      phone: contactInfo.phone,
      firstSeen: Infinity,
@@ -205,7 +248,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
     };
    }
 
-   const g = guestMap[name];
+   const g = guestMap[normalizedName];
    g.reservations.push(res);
 
    // Timestamps
@@ -238,10 +281,11 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
   });
 
   // 2. Process Internal Feedbacks
+  // Task 6: Usar nome normalizado como chave
   feedbacks.forEach(fb => {
-   const name = fb.guestName.trim();
-   if (guestMap[name]) {
-    guestMap[name].reviews.push({
+   const normalizedName = normalizeGuestName(fb.guestName);
+   if (guestMap[normalizedName]) {
+    guestMap[normalizedName].reviews.push({
      source: 'internal',
      rating: fb.rating,
      comment: fb.comment,
@@ -260,13 +304,18 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
     // Find guest by Reservation ID
     if (t.reservationId) {
       const res = filteredReservations.find(r => r.id === t.reservationId);
-      if (res && guestMap[res.guestName]) {
-        guestMap[res.guestName].tickets.push(t);
-        return;
+      if (res) {
+        const normalizedName = normalizeGuestName(res.guestName);
+        if (guestMap[normalizedName]) {
+          guestMap[normalizedName].tickets.push(t);
+          return;
+        }
       }
     }
     // Fallback: Check if description contains guest name (common practice)
-    const possibleGuest = Object.values(guestMap).find(g => t.description.toLowerCase().includes(g.name.toLowerCase()));
+    const possibleGuest = Object.values(guestMap).find(g => 
+      t.description.toLowerCase().includes(normalizeGuestName(g.name))
+    );
     if (possibleGuest) {
       possibleGuest.tickets.push(t);
     }
@@ -293,12 +342,36 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
    return g;
   });
 
+ // 🔍 Bugfix: Logs de diagnóstico em DEV (com info de fonte)
+  if (import.meta.env.DEV) {
+    const canceledCount = filteredReservations.filter(r => r.status === ReservationStatus.CANCELED).length;
+    const validCount = filteredReservations.length - canceledCount;
+    const top5ByLTV = [...result].sort((a, b) => b.totalSpend - a.totalSpend).slice(0, 5);
+    
+    console.group('[GuestCRM] 📊 Diagnóstico de Dados (CRM & Ciclo)');
+    console.log('🔗 Fonte de reservations:', ownReservations.length > 0 ? 'OWN QUERY (isolada)' : 'PROP (compartilhada)');
+    console.log('📦 Total de reservas carregadas:', filteredReservations.length);
+    console.log('  ├─ Canceladas:', canceledCount);
+    console.log('  └─ Válidas:', validCount);
+    console.log('👥 Hóspedes consolidados:', result.length);
+    console.log('💰 Dados financeiros:', financialData ? `${financialData.count} registros` : 'CARREGANDO...');
+    console.log('🏆 Top 5 por LTV:', top5ByLTV.map(g => ({
+      name: g.name,
+      totalStays: g.totalStays,
+      totalNights: g.totalNights,
+      totalSpend: `R$ ${g.totalSpend.toFixed(2)}`,
+    })));
+    console.groupEnd();
+  }
+
   return result;
  }, [filteredReservations, tickets, feedbacks, financialMap, guestContactMap]);
 
  const filteredGuests = useMemo(() => {
-  // 1. Search Filter
-  let list = guests.filter(g => g.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  // 1. Search Filter (com debounce)
+  // Task 6: Usar normalização para busca case-insensitive e sem acentos
+  const normalizedSearch = normalizeGuestName(debouncedSearchTerm);
+  let list = guests.filter(g => normalizeGuestName(g.name).includes(normalizedSearch));
 
   // 2. Status Filter
   if (filterStatus !== 'all') {
@@ -349,7 +422,7 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
   });
 
   return list;
- }, [guests, searchTerm, filterStatus, sortBy, dateFrom, dateTo]);
+ }, [guests, debouncedSearchTerm, filterStatus, sortBy, dateFrom, dateTo]);
 
  const activeGuest = useMemo(() => {
   return selectedGuestName ? guests.find(g => g.name === selectedGuestName) : null;
@@ -391,59 +464,61 @@ const GuestCRM: React.FC<GuestCRMProps> = ({ reservations, tickets, feedbacks, c
        />
       </div>
 
-      {/* Filters Row */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Filter className="absolute text-gray-400 left-2 top-2" size={14} />
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="w-full pl-7 py-1.5 bg-white border border-gray-200 rounded-none text-xs font-medium text-gray-700 focus:outline-none focus:border-blue-500 appearance-none"
-          >
-            <option value="all">Todos Status</option>
-            <option value="inhouse">In-House (Hospedado)</option>
-            <option value="checkin">Check-in Hoje</option>
-            <option value="checkout">Check-out Hoje</option>
-          </select>
-        </div>
-        <div className="relative flex-1">
-          <ArrowUpDown className="absolute text-gray-400 left-2 top-2" size={14} />
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
-            className="w-full pl-7 py-1.5 bg-white border border-gray-200 rounded-none text-xs font-medium text-gray-700 focus:outline-none focus:border-blue-500 appearance-none"
-          >
-            <option value="spend">Maior Valor (LTV)</option>
-            <option value="recent">Mais Recentes</option>
-            <option value="oldest">Mais Antigos</option>
-            <option value="nights">Mais Noites</option>
-            <option value="bookings">Mais Reservas</option>
-          </select>
-        </div>
-      </div>
+      {/* Bugfix: Filtros responsivos com layout flexível */}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1 min-w-[140px]">
+            <Filter className="absolute text-gray-400 left-2 top-2.5" size={14} />
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as any)}
+              className="w-full py-2 pl-8 pr-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+            >
+              <option value="all">Todos Status</option>
+              <option value="checkin">Check-in Hoje</option>
+              <option value="checkout">Check-out Hoje</option>
+              <option value="inhouse">In-House</option>
+            </select>
+          </div>
 
-      {/* Date Range Filter */}
-      <div className="flex gap-2 items-center">
-        <div className="relative flex-1">
-          <Calendar className="absolute text-gray-400 left-2 top-2" size={14} />
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="w-full pl-7 py-1.5 bg-white border border-gray-200 rounded-none text-xs font-medium text-gray-700 focus:outline-none focus:border-blue-500"
-            placeholder="De"
-          />
+          <div className="relative flex-1 min-w-[140px]">
+            <ArrowUpDown className="absolute text-gray-400 left-2 top-2.5" size={14} />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="w-full py-2 pl-8 pr-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+            >
+              <option value="spend">Maior Valor (LTV)</option>
+              <option value="recent">Mais Recente</option>
+              <option value="oldest">Mais Antigo</option>
+              <option value="nights">Total de Noites</option>
+              <option value="bookings">Total de Reservas</option>
+            </select>
+          </div>
         </div>
-        <span className="text-xs text-gray-400">até</span>
-        <div className="relative flex-1">
-          <Calendar className="absolute text-gray-400 left-2 top-2" size={14} />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="w-full pl-7 py-1.5 bg-white border border-gray-200 rounded-none text-xs font-medium text-gray-700 focus:outline-none focus:border-blue-500"
-            placeholder="Até"
-          />
+
+        {/* Date Range Filter */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1 min-w-[120px]">
+            <Calendar className="absolute text-gray-400 left-2 top-2.5" size={14} />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              placeholder="Data inicial"
+              className="w-full px-3 py-2 pl-8 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+          </div>
+          <div className="relative flex-1 min-w-[120px]">
+            <Calendar className="absolute text-gray-400 left-2 top-2.5" size={14} />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              placeholder="Data final"
+              className="w-full px-3 py-2 pl-8 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+          </div>
         </div>
         {(dateFrom || dateTo) && (
           <button

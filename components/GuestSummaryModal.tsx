@@ -4,22 +4,13 @@ import { AlertCircle, CalendarDays, Crown, DollarSign, MessageSquare, Moon, Repe
 import { Reservation, ReservationStatus } from '../types';
 import { getDetailedFinancials } from '../services/staysApiService';
 import { storageService } from '../services/storage';
-import { formatCurrency, formatDatePtBR } from '../utils';
+import { formatCurrency, formatDatePtBR, normalizeGuestName } from '../utils';
 
 interface GuestSummaryModalProps {
   guestName: string;
   staysReservations: Reservation[];
   onClose: () => void;
 }
-
-const normalizeGuestName = (name: string): string => {
-  return name
-    .toLowerCase()
-    .trim()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ');
-};
 
 const calculateReservationNights = (reservation: Reservation): number => {
   if (reservation.nights && reservation.nights > 0) {

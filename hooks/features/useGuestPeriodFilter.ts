@@ -75,12 +75,16 @@ export function useGuestPeriodFilter({
   // Calcular intervalo de datas baseado no preset
   // Usa intervalo inclusivo: [startDate, endDate] (ambos inclusos)
   const { periodStartDate, periodEndDate, shouldFilterByPeriod } = useMemo(() => {
-    // Se for 'all', não filtrar por período
+    // BUGFIX Sprint 3: "all" agora filtra de hoje até +90 dias (sem dias vazios do passado)
     if (periodPreset === 'all') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const ninetyDaysAhead = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
+      
       return {
-        periodStartDate: null,
-        periodEndDate: null,
-        shouldFilterByPeriod: false
+        periodStartDate: today,
+        periodEndDate: ninetyDaysAhead,
+        shouldFilterByPeriod: true
       };
     }
 
@@ -114,15 +118,14 @@ export function useGuestPeriodFilter({
       case 'custom':
         // Personalizado: usar exatamente as datas fornecidas (ACEITA PASSADO)
         if (!customStartDate || !customEndDate) {
-          // Se não tem datas customizadas válidas, não filtrar
-          return {
-            periodStartDate: null,
-            periodEndDate: null,
-            shouldFilterByPeriod: false
-          };
+          // BUGFIX Sprint 3: Fallback para 7 dias a partir de hoje se não tem datas
+          console.log('⚠️ [GUEST PERIOD FILTER] Custom sem datas - usando fallback 7 dias');
+          startDate = new Date(now);
+          endDate = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000);
+        } else {
+          startDate = new Date(customStartDate + 'T00:00:00');
+          endDate = new Date(customEndDate + 'T00:00:00');
         }
-        startDate = new Date(customStartDate + 'T00:00:00');
-        endDate = new Date(customEndDate + 'T00:00:00');
         break;
       default:
         startDate = new Date(now);
@@ -185,7 +188,10 @@ export function useGuestPeriodFilter({
       console.log('  ✅ Grupos após filtro de status:', statusFilteredGroups.length);
       groups = statusFilteredGroups;
     } else {
-      console.log('  ℹ️ Sem filtro de status - mostrando todos os status');
+      // BUGFIX Sprint 3: Remover grupos vazios quando não há filtro de status
+      // Isso evita renderizar "Nenhuma reserva neste dia" para dias vazios
+      console.log('  ℹ️ Sem filtro de status - removendo grupos vazios');
+      groups = groups.filter(group => group.items.length > 0);
     }
 
     // 3. Aplicar busca e filtro de propriedade (filtrar items dentro dos grupos)
