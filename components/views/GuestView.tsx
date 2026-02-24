@@ -17,6 +17,8 @@ import { PaginationBar } from '../ui/PaginationBar';
 import { storageService } from '../../services/storage';
 import { getReservationOverrideKey, parseLocalDate, formatDatePtBR, getReservationCardColors } from '../../utils';
 import { isAutomaticCheckoutTicket } from '../../utils/ticketFilters';
+import { getAllData } from '../../services/staysApiService';
+import { mapCalendarToReservations, mapDashboardToAgendaGroups } from '../../services/staysDataMapper';
 
 interface GuestViewProps {
   staysReservations: Reservation[];
@@ -79,10 +81,48 @@ export const GuestView: React.FC<GuestViewProps> = ({
     return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
   };
 
+  // BUGFIX Sprint 3: "Todos" não deve buscar 5 anos (performance + dias vazios)
+  // Solução: "Todos" = a partir de hoje até +90 dias (inicialmente)
+  // Futuro: Adicionar "Carregar mais" para paginação progressiva
+  const shouldUseAllDataQuery = guestPeriodPreset === 'all';
+  
+  const allDataPeriod = useMemo(() => {
+    if (!shouldUseAllDataQuery) return null;
+    
+    // "Todos": De hoje até +90 dias (rápido, sem backlog antigo)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const ninetyDaysAhead = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
+    
+    return {
+      from: today.toISOString().split('T')[0],
+      to: ninetyDaysAhead.toISOString().split('T')[0],
+    };
+  }, [shouldUseAllDataQuery]);
+
+  // Query própria para período "Todos" com dados AMPLOS 
+  const { data: allDataResult, isLoading: isLoadingAllData } = useQuery({
+    queryKey: ['guest-view-all-data', allDataPeriod?.from, allDataPeriod?.to],
+    queryFn: () => getAllData(allDataPeriod!.from, allDataPeriod!.to),
+    staleTime: 5 * 60 * 1000, // 5 minutos (dados históricos são estáveis)
+    enabled: shouldUseAllDataQuery && !!allDataPeriod,
+  });
+
+  // Escolher fonte de dados baseada no período selecionado
+  const effectiveReservations = shouldUseAllDataQuery && allDataResult 
+    ? mapCalendarToReservations(allDataResult.calendar) 
+    : staysReservations;
+  const effectiveAgendaGroups = shouldUseAllDataQuery && allDataResult 
+    ? mapDashboardToAgendaGroups(allDataResult.dashboard) 
+    : staysAgendaGroups;
+  const effectiveLoading = shouldUseAllDataQuery 
+    ? isLoadingAllData 
+    : staysLoading;
+
   // Hook para filtrar e agrupar reservas por período e status
   const { filteredAgendaGroups } = useGuestPeriodFilter({
-    staysReservations,
-    staysAgendaGroups,
+    staysReservations: effectiveReservations,
+    staysAgendaGroups: effectiveAgendaGroups,
     periodPreset: guestPeriodPreset,
     customStartDate: guestCustomStartDate,
     customEndDate: guestCustomEndDate,
@@ -101,7 +141,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
   // Task 40-43: Carregar overrides em lote para mostrar tags nos cards
   const reservationKeys = useMemo(() => {
-    return staysReservations.map(res => {
+    return effectiveReservations.map(res => {
       try {
         return getReservationOverrideKey(res);
       } catch (error) {
@@ -109,7 +149,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
         return null;
       }
     }).filter(Boolean) as string[];
-  }, [staysReservations]);
+  }, [effectiveReservations]);
 
   const { data: overridesMap = new Map() } = useQuery({
     queryKey: ['guest-view-overrides', reservationKeys.join(',')],
@@ -154,7 +194,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
   const guestReservationCount = React.useMemo(() => {
     const countMap = new Map<string, number>();
 
-    staysReservations.forEach(reservation => {
+    effectiveReservations.forEach(reservation => {
       // Ignora reservas canceladas na contagem
       if (reservation.status === 'Cancelada') return;
 
@@ -163,7 +203,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
     });
 
     return countMap;
-  }, [staysReservations]);
+  }, [effectiveReservations]);
 
   if (viewMode !== 'cards' && viewMode !== 'list' && viewMode !== 'calendar') {
     return null;
@@ -200,27 +240,44 @@ export const GuestView: React.FC<GuestViewProps> = ({
         </>
       )}
 
-      {staysLoading ? (
-        viewMode === 'cards' ? (
-          <SkeletonAgenda />
-        ) : viewMode === 'list' ? (
-          <SkeletonList count={10} />
-        ) : (
-          <div className="bg-white rounded-lg border border-gray-200 p-8">
-            <div className="animate-pulse space-y-4">
-              <div className="h-8 bg-gray-200 rounded w-48"></div>
-              <div className="grid grid-cols-7 gap-2">
-                {Array.from({ length: 35 }).map((_, i) => (
-                  <div key={i} className="h-24 bg-gray-100 rounded"></div>
-                ))}
+      {effectiveLoading ? (
+        <div className="space-y-4">
+          {/* Mensagem de loading específica para período "Todos" */}
+          {shouldUseAllDataQuery && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                <div className="text-sm text-blue-800">
+                  <div className="font-medium">Carregando reservas...</div>
+                  <div className="text-xs opacity-75">
+                    Período: Hoje até +90 dias
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        )
+          )}
+          
+          {viewMode === 'cards' ? (
+            <SkeletonAgenda />
+          ) : viewMode === 'list' ? (
+            <SkeletonList count={10} />
+          ) : (
+            <div className="bg-white rounded-lg border border-gray-200 p-8">
+              <div className="animate-pulse space-y-4">
+                <div className="h-8 bg-gray-200 rounded w-48"></div>
+                <div className="grid grid-cols-7 gap-2">
+                  {Array.from({ length: 35 }).map((_, i) => (
+                    <div key={i} className="h-24 bg-gray-100 rounded"></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       ) : viewMode === 'calendar' ? (
         <CalendarView
           mode="guest"
-          reservations={staysReservations}
+          reservations={effectiveReservations}
           currentDate={currentMonth}
           onDateChange={setCurrentMonth}
           onItemClick={setSelectedReservation}
