@@ -50,6 +50,17 @@ export const isToday = (date: string | Date): boolean => {
 };
 
 /**
+ * Retorna o baseline (marco temporal) para detecção de tickets atrasados.
+ * Task 3: Baseline fixo em 01/02/2026 (go-live) para evitar backlog antigo
+ * mas considerar todos os chamados do mês corrente.
+ * 
+ * @returns Date objeto representando 2026-02-01 00:00:00 (timezone do Brasil)
+ */
+export const getMaintenanceOverdueBaseline = (): Date => {
+  return new Date('2026-02-01T00:00:00-03:00');
+};
+
+/**
  * Task 6: Normaliza nome de hóspede para agrupamento consistente
  * Remove acentos, converte para lowercase, normaliza espaços
  * Garante que variações do mesmo nome sejam tratadas como único hóspede
