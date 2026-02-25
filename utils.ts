@@ -1,3 +1,5 @@
+import { Reservation, ReservationStatus } from './types';
+
 /**
  * Generate a random ID string (9 characters, alphanumeric)
  */
@@ -662,4 +664,96 @@ export const getStatusBadgeClass = (status: string): string => {
     default:
       return 'bg-gray-50 text-gray-700 border-gray-100';
   }
+};
+
+/**
+ * 🗺️ Sprint 3 - Task 5: Helper unificado para cálculo de ocupação "AGORA"
+ * 
+ * Garante consistência entre Mapa e Guest & CRM ao calcular:
+ * - Check-in de HOJE
+ * - Check-out de HOJE
+ * - In-house AGORA
+ * - Ocupados (união sem duplicação)
+ * - Vazios (imóveis sem ocupação)
+ * 
+ * Usa timezone do Brasil e mesma lógica de data/hora em todos os módulos.
+ * 
+ * @param reservations Lista de reservas (Stays API)
+ * @param propertyCode Código do imóvel (opcional, para filtrar)
+ * @returns Objeto com Sets de IDs de reservas por categoria
+ */
+export interface OccupancyNow {
+  checkinToday: Set<string>;      // Reservas com check-in hoje
+  checkoutToday: Set<string>;     // Reservas com check-out hoje
+  inhouseNow: Set<string>;        // Reservas in-house agora
+  occupied: Set<string>;          // União de todas acima (sem duplicação)
+  vacant: Set<string>;            // Imóveis sem ocupação (requer lista de properties)
+  
+  // Metadata para debug
+  todayTime: number;
+  now: number;
+}
+
+export const computeOccupancyNow = (
+  reservations: Reservation[],
+  propertyCode?: string
+): OccupancyNow => {
+  // Usar timezone do Brasil (consistente com Guest & CRM)
+  const today = getTodayBrazil();
+  const todayTime = today.getTime();
+  const now = Date.now();
+
+  const checkinToday = new Set<string>();
+  const checkoutToday = new Set<string>();
+  const inhouseNow = new Set<string>();
+
+  // Filtrar reservas canceladas
+  const validReservations = reservations.filter(r => 
+    r.status !== ReservationStatus.CANCELED &&
+    (!propertyCode || r.propertyCode === propertyCode)
+  );
+
+  validReservations.forEach(r => {
+    // Usar parseLocalDate para garantir timezone correto
+    const cin = parseLocalDate(r.checkInDate);
+    const cout = parseLocalDate(r.checkOutDate);
+    const cinTime = cin.getTime();
+    const coutTime = cout.getTime();
+
+    // Check-in HOJE = checkInDate é hoje
+    if (cinTime === todayTime) {
+      checkinToday.add(r.id);
+    }
+
+    // Check-out HOJE = checkOutDate é hoje
+    if (coutTime === todayTime) {
+      checkoutToday.add(r.id);
+    }
+
+    // In-house AGORA = checkIn <= hoje < checkOut
+    // Nota: Usamos todayTime (não now) porque estamos trabalhando com datas sem hora
+    if (cinTime <= todayTime && coutTime >= todayTime) {
+      inhouseNow.add(r.id);
+    }
+  });
+
+  // Ocupados = união de todos (sem duplicação graças ao Set)
+  const occupied = new Set([
+    ...checkinToday,
+    ...checkoutToday,
+    ...inhouseNow
+  ]);
+
+  // Vazios será calculado no componente que tem acesso à lista de properties
+  const vacant = new Set<string>();
+
+  return {
+    checkinToday,
+    checkoutToday,
+    inhouseNow,
+    occupied,
+    vacant,
+    todayTime,
+    now
+  };
 };

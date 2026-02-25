@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Property, Reservation, Ticket, TicketStatus, ReservationStatus } from '../types';
 import { Map, MapPin, Filter, AlertCircle, Home, LogIn, LogOut, CheckCircle2, Wrench, Gem } from 'lucide-react';
+import { computeOccupancyNow, getTodayBrazil, parseLocalDate } from '../utils';
+import { isAutomaticCheckoutTicket } from '../utils/ticketFilters';
 
 interface MapPanelProps {
  properties: Property[];
@@ -63,39 +65,95 @@ const MapPanel: React.FC<MapPanelProps> = ({ properties, reservations, tickets, 
  }, []);
 
  // Process Properties into Markers
+ // Task 5: Usar helper unificado para garantir consistência com Guest & CRM
  const markers = useMemo(() => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayTime = today.getTime();
+  // Calcular ocupação usando helper unificado (timezone do Brasil)
+  const occupancyData = computeOccupancyNow(reservations);
+  const { checkinToday, checkoutToday, inhouseNow, todayTime } = occupancyData;
+
+  // Debug em DEV
+  if (import.meta.env.DEV) {
+    const now = new Date();
+    const today = getTodayBrazil();
+    console.group('[MapPanel] 🗺️ Diagnóstico de Ocupação (AGORA)');
+    console.log('⏰ Now:', now.toLocaleString('pt-BR'));
+    console.log('📅 Today (Brasil):', today.toLocaleDateString('pt-BR'));
+    console.log('📊 Totais:');
+    console.log('  ├─ Check-in hoje:', checkinToday.size);
+    console.log('  ├─ Check-out hoje:', checkoutToday.size);
+    console.log('  ├─ In-house agora:', inhouseNow.size);
+    console.log('  └─ Ocupados (união):', occupancyData.occupied.size);
+    console.log('🔍 Exemplos (3 primeiros de cada):');
+    console.log('  ├─ Check-in:', Array.from(checkinToday).slice(0, 3));
+    console.log('  ├─ Check-out:', Array.from(checkoutToday).slice(0, 3));
+    console.log('  └─ In-house:', Array.from(inhouseNow).slice(0, 3));
+    console.groupEnd();
+  }
 
   return properties
    .filter(p => p.lat && p.lng) // Only map properties with coords
    .map(p => {
-    // Status Check
+    // Status Check: Buscar TODAS as reservas deste imóvel (não apenas a primeira)
     let status: 'occupied' | 'vacant' = 'vacant';
     let guestName = '';
     let isCheckIn = false;
     let isCheckOut = false;
+    let currentReservation: Reservation | undefined;
 
-    const activeRes = reservations.find(r => {
+    // Buscar reservas ativas para este imóvel
+    const propertyReservations = reservations.filter(r => {
      if (r.propertyCode !== p.code || r.status === ReservationStatus.CANCELED) return false;
-     const cin = new Date(r.checkInDate).setHours(0, 0, 0, 0);
-     const cout = new Date(r.checkOutDate).setHours(0, 0, 0, 0);
      
-     if (cin === todayTime) isCheckIn = true;
-     if (cout === todayTime) isCheckOut = true;
-
-     // Occupied if: Checkin Today OR In-House (Cin < Today < Cout) OR Checkout Today (until user leaves)
-     return (cin <= todayTime && cout >= todayTime);
+     // Verificar se está no Set de ocupados (já calculado pelo helper)
+     return occupancyData.occupied.has(r.id);
     });
 
-    if (activeRes) {
-     status = 'occupied';
-     guestName = activeRes.guestName;
+    if (propertyReservations.length > 0) {
+      // Usar a reserva mais recente (por check-in)
+      currentReservation = propertyReservations.sort((a, b) => {
+        const aTime = parseLocalDate(a.checkInDate).getTime();
+        const bTime = parseLocalDate(b.checkInDate).getTime();
+        return bTime - aTime; // Mais recente primeiro
+      })[0];
+
+      status = 'occupied';
+      guestName = currentReservation.guestName;
+      
+      // Verificar flags usando os Sets calculados
+      isCheckIn = checkinToday.has(currentReservation.id);
+      isCheckOut = checkoutToday.has(currentReservation.id);
     }
 
-    // Alert Check
-    const propTickets = tickets.filter(t => t.propertyCode === p.code && t.status !== TicketStatus.DONE);
+    // Alert Check com filtros corretos (Task 5)
+    // 1. Remover tickets de checkout automático
+    // 2. Remover tickets concluídos
+    // 3. Filtrar apenas tickets relevantes à estadia atual
+    let propTickets = tickets.filter(t => {
+      // Filtro básico: mesmo imóvel, não concluído, não é checkout automático
+      if (t.propertyCode !== p.code) return false;
+      if (t.status === TicketStatus.DONE) return false;
+      if (isAutomaticCheckoutTicket(t)) return false;
+
+      // Se há reserva ativa, filtrar por contexto da estadia
+      if (currentReservation) {
+        // Preferencial: ticket vinculado à reserva atual
+        if (t.reservationId === currentReservation.id) {
+          return true;
+        }
+
+        // Fallback: ticket criado durante o período da estadia atual
+        const ticketCreatedAt = t.createdAt;
+        const cinTime = parseLocalDate(currentReservation.checkInDate).getTime();
+        const coutTime = parseLocalDate(currentReservation.checkOutDate).getTime();
+        
+        return ticketCreatedAt >= cinTime && ticketCreatedAt <= coutTime;
+      }
+
+      // Se não há reserva ativa, considerar todos os tickets não finalizados
+      // (pode ser ticket de manutenção preventiva em imóvel vazio)
+      return true;
+    });
+
     const hasMaint = propTickets.some(t => !t.category || t.category === 'maintenance');
     const hasConcierge = propTickets.some(t => t.category === 'concierge');
     
