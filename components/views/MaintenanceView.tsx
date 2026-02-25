@@ -11,7 +11,7 @@ import { AssigneeFilter } from './AssigneeFilter';
 import { PropertyFilter } from './PropertyFilter'; // NOVO: Filtro de Imóveis
 import { MaintenanceStatusFilter } from './MaintenanceStatusFilter';
 import PeriodFilter from './PeriodFilter';
-import { parseLocalDate, formatDatePtBR, isToday, isTomorrow } from '../../utils';
+import { parseLocalDate, formatDatePtBR, isToday, isTomorrow, getMaintenanceOverdueBaseline } from '../../utils';
 import { useQueryClient } from '@tanstack/react-query';
 import { storageService } from '../../services/storage';
 
@@ -61,24 +61,22 @@ const isTicketOverdue = (ticket: Ticket): boolean => {
   const deadline = ticket.scheduledDate || ticket.desiredDate;
   if (!deadline) return false;
   
-  // Marco temporal: "a partir de hoje" para evitar backlog antigo
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Task 3 (AJUSTE): Marco temporal fixo em 01/02/2026 (go-live) 
+  // para considerar atrasados do mês corrente sem trazer backlog antigo
+  const baseline = getMaintenanceOverdueBaseline(); // 2026-02-01 00:00:00
   
-  // Verificar se o ticket foi criado/agendado "a partir de hoje"
-  const ticketDate = new Date(ticket.createdAt);
-  ticketDate.setHours(0, 0, 0, 0);
+  // Verificar se o ticket está dentro do escopo temporal (>= 01/02/2026)
+  // Usar o deadline como referência principal para o escopo
+  const deadlineDate = new Date(deadline);
+  const deadlineForScope = new Date(deadlineDate);
+  deadlineForScope.setHours(0, 0, 0, 0);
   
-  const scheduledDateForScope = new Date(deadline);
-  scheduledDateForScope.setHours(0, 0, 0, 0);
-  
-  // Considerar apenas tickets criados hoje ou no futuro, OU com data desejada >= hoje
-  const isWithinScope = ticketDate >= today || scheduledDateForScope >= today;
+  // Considerar apenas tickets com deadline >= baseline
+  const isWithinScope = deadlineForScope >= baseline;
   if (!isWithinScope) return false;
   
   // Comparar deadline com agora (MANTENDO HORÁRIO ESPECÍFICO)
   const now = new Date();
-  const deadlineDate = new Date(deadline);
   
   // Se a deadline tem horário específico (não é meia-noite), manter horário na comparação
   const hasSpecificTime = deadlineDate.getHours() !== 0 || deadlineDate.getMinutes() !== 0;

@@ -116,3 +116,56 @@ O sistema de filtros por período estava ocultando tickets atrasados quando o us
   - Quando é meia-noite (00:00): mantém comportamento anterior (compara apenas datas)
 - **Exemplo corrigido**: Ticket com prazo "11/02/2026 às 04:17" agora é detectado como atrasado às 10:00 do mesmo dia
 - **Impacto**: Maior precisão na detecção de atrasos em tempo real, especialmente para tickets com prazos intradiários
+
+---
+
+**🔧 Correção do Baseline Temporal (25/02/2026):**
+
+**Problema identificado:**
+A implementação inicial usava "a partir de hoje" (`startOfToday`) como marco temporal para detecção de tickets atrasados. Isso causava um efeito colateral crítico:
+
+- **Bug real**: Chamado criado em 18/02/2026 (ex.: "prateleiras lateral da cama") com data desejada 18/02 às 11:00
+- Status: **Atribuído** (não concluído)
+- Comportamento incorreto: Ao chegar em 24/02 ou 25/02, o chamado **subia da tela** em vez de aparecer em "Atrasados"
+- **Causa**: A lógica `ticketDate >= today || scheduledDate >= today` excluía tickets criados/agendados em dias passados, mesmo que estivessem atrasados e não concluídos
+
+**Solução aplicada:**
+1. **Baseline fixo em 01/02/2026**: Substituído o conceito dinâmico "a partir de hoje" por uma data fixa de go-live (`2026-02-01 00:00:00`)
+2. **Helper centralizado**: Criada função `getMaintenanceOverdueBaseline()` em `utils.ts` para facilitar ajustes futuros
+3. **Escopo baseado no deadline**: Mudança de critério - agora usa apenas o deadline (scheduledDate/desiredDate) como referência de escopo, não mais a data de criação do ticket
+4. **Regra simplificada**: Ticket é atrasado quando:
+   - `status !== DONE` (qualquer status exceto Concluído)
+   - Possui deadline válido (scheduledDate OU desiredDate)
+   - `deadline < now` (com manutenção de horário específico)
+   - `deadline >= baseline` (2026-02-01, para evitar backlog muito antigo)
+
+**Arquivos alterados:**
+- [`utils.ts`](../../utils.ts): Adicionado `getMaintenanceOverdueBaseline()` helper
+- [`hooks/features/useMaintenanceFilters.ts`](../../hooks/features/useMaintenanceFilters.ts): Atualizada função `isTicketOverdueInScope()` (2 ocorrências)
+- [`components/views/MaintenanceView.tsx`](../../components/views/MaintenanceView.tsx): Atualizada função `isTicketOverdue()`
+
+**Resultado:**
+- Tickets criados em 18/02 com deadline < now e status ≠ DONE agora **permanecem visíveis** em "Atrasados"
+- Tickets não concluídos de qualquer dia do mês corrente (fev/2026) ficam em destaque até serem concluídos
+- Backlog anterior a 01/02/2026 continua excluído (não polui interface)
+- Comportamento consistente independente da data atual
+
+**Exemplo corrigido:**
+```
+Ticket ID: A88
+Criado em: 17/02/2026 15:59:49
+Data Desejada: 18/02/2026 11:00
+Status: Atribuído
+Data atual: 25/02/2026
+
+✅ ANTES (comportamento incorreto): Sumia da tela
+✅ AGORA (comportamento correto): Aparece em "Atrasados" e permanece até conclusão
+```
+
+**Critérios de aceite validados:**
+- [x] Tickets não concluídos com deadline >= 01/02/2026 e deadline < now aparecem em "Atrasados"
+- [x] Tickets atrasados permanecem visíveis independente do filtro de período
+- [x] Tickets podem ter qualquer status (ASSIGNED, ON_THE_WAY, IN_PROGRESS) e continuam visíveis até DONE
+- [x] Tickets anteriores a 01/02/2026 não reintroduzem backlog antigo
+- [x] Concluir chamado remove da seção Atrasados imediatamente
+- [x] Build TypeScript sem erros
